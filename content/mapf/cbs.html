@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBS Algorithm</title>
+<meta name="description" content="Interactive explanation of Conflict-Based Search (CBS) for optimal multi-agent pathfinding, with step-through demos for conflicts, constraint trees, low-level search, MDDs, and CBS vs A* comparison.">
+<meta property="og:title" content="CBS Algorithm — Interactive Explainer">
+<meta property="og:description" content="Interactive explanation of Conflict-Based Search for optimal multi-agent pathfinding. Step through conflicts, constraint trees, low-level A* search, MDD construction, and CBS vs A* comparisons.">
+<meta property="og:type" content="article">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap">
+</head>
+<body>
+
+<style>
+/* Layout: vertical sections with interactive card demos */
+:root {
+  --bg: #f4f4f9; --fg: #1a1a2e; --surface: #fff; --border: #d8dbe6;
+  --muted: #64648a; --muted2: #9898ae;
+  --a1: #3d6fa0; --a1f: #d0e2f2; --a1t: #1e3a5c; --a1s: #5a96cc;
+  --a2: #b83a2d; --a2f: #f8ddd9; --a2t: #6e1f16; --a2s: #d95a4a;
+  --ok: #1f8050; --okf: #cdf0dc; --okt: #145538;
+  --warn: #c27010; --warnf: #fef0d8;
+  --conflict: #d03030;
+  --node: #e6e8f0; --node-s: #b8bccf;
+  --edge: #a8aec2;
+  --btn: #3d6fa0; --btn-f: #fff; --btn-d: #c0c4d4;
+  --code: #ecedf4;
+  --ct-bg: #f8f8fc; --ct-border: #c8cce0;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c0c1a; --fg:#d8d8ec; --surface:#141428; --border:#252540;
+  --muted:#8080a0; --muted2:#55556e;
+  --a1:#6aaae0; --a1f:#162a42; --a1t:#aacce8; --a1s:#4888c0;
+  --a2:#e86050; --a2f:#3a1818; --a2t:#f0a898; --a2s:#c04838;
+  --ok:#38c878; --okf:#142e20; --okt:#78e8a8;
+  --warn:#e89020; --warnf:#2a2010;
+  --conflict:#ff5858;
+  --node:#1e1e38; --node-s:#3a3a58;
+  --edge:#3c4060;
+  --btn:#6aaae0; --btn-f:#0c0c1a; --btn-d:#252540;
+  --code:#121228;
+  --ct-bg:#161630; --ct-border:#2a2a48;
+  color-scheme:dark
+}}
+:root[data-theme="dark"]{
+  --bg:#0c0c1a; --fg:#d8d8ec; --surface:#141428; --border:#252540;
+  --muted:#8080a0; --muted2:#55556e;
+  --a1:#6aaae0; --a1f:#162a42; --a1t:#aacce8; --a1s:#4888c0;
+  --a2:#e86050; --a2f:#3a1818; --a2t:#f0a898; --a2s:#c04838;
+  --ok:#38c878; --okf:#142e20; --okt:#78e8a8;
+  --warn:#e89020; --warnf:#2a2010;
+  --conflict:#ff5858;
+  --node:#1e1e38; --node-s:#3a3a58;
+  --edge:#3c4060;
+  --btn:#6aaae0; --btn-f:#0c0c1a; --btn-d:#252540;
+  --code:#121228;
+  --ct-bg:#161630; --ct-border:#2a2a48;
+  color-scheme:dark
+}
+
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:24px;max-width:880px;margin:0 auto;line-height:1.6}
+
+h1{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:600;
+  letter-spacing:-.02em;margin-bottom:4px}
+h2{font-family:'JetBrains Mono',monospace;font-size:.9rem;font-weight:600;
+  letter-spacing:-.01em;margin:32px 0 10px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--muted)}
+h3{font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:600;margin:0 0 8px}
+
+.sub{color:var(--muted);font-size:.82rem;margin:0 0 24px;line-height:1.6;max-width:620px}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;margin-bottom:14px}
+.card-body{padding:18px}
+.graph-wrap{padding:14px 8px;overflow-x:auto}
+.graph-wrap svg{display:block;margin:0 auto}
+
+.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;
+  border-top:1px solid var(--border);background:var(--code)}
+.bar button{font-family:'JetBrains Mono',monospace;font-size:.73rem;
+  padding:5px 14px;border:none;border-radius:5px;cursor:pointer;
+  background:var(--btn);color:var(--btn-f);transition:opacity .15s,background .15s}
+.bar button:hover:not(:disabled){opacity:.85}
+.bar button:disabled{background:var(--btn-d);color:var(--muted);cursor:default;opacity:.55}
+.slab{font-family:'JetBrains Mono',monospace;font-size:.7rem;
+  color:var(--muted);flex:1;text-align:center;font-variant-numeric:tabular-nums}
+
+.desc{font-size:.82rem;line-height:1.75;padding:14px 18px;min-height:70px}
+.desc strong{font-weight:600}
+.ha1{color:var(--a1);font-weight:600}
+.ha2{color:var(--a2);font-weight:600}
+.hok{color:var(--ok);font-weight:600}
+.hwarn{color:var(--warn);font-weight:500}
+.hconflict{color:var(--conflict);font-weight:600}
+
+code{font-family:'JetBrains Mono',monospace;font-size:.76rem;
+  background:var(--code);padding:1px 6px;border-radius:3px}
+
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.72rem;color:var(--muted);margin-top:12px}
+.legend-i{display:flex;align-items:center;gap:5px}
+.ldot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+svg text{font-family:'JetBrains Mono',monospace}
+
+.concept{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.concept-fig{flex:0 0 auto;min-width:0}
+.concept-text{flex:1 1 240px;min-width:0;font-size:.82rem;line-height:1.7}
+.concept-text code{font-size:.76rem}
+
+.algo-box{background:var(--code);border:1px solid var(--border);border-radius:6px;
+  padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:.72rem;
+  line-height:1.9;overflow-x:auto;margin:10px 0}
+.algo-box .ln{color:var(--muted2);display:inline-block;width:22px;text-align:right;margin-right:10px;user-select:none}
+.algo-box .hl{background:var(--a1f);border-radius:3px;padding:0 4px}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulse{animation:pulse .8s ease-in-out infinite}
+
+.section-intro{font-size:.84rem;line-height:1.7;margin-bottom:16px;max-width:640px}
+
+/* MDD section — variable aliases map to the CBS palette */
+#mdd-section{
+  --nf:var(--a1f);--ns:var(--a1);--nt:var(--a1t);
+  --pf:var(--a2f);--ps:var(--a2);--pt:var(--a2t);
+  --sf:var(--okf);--ss:var(--ok);--st:var(--okt);
+  --heur:#7b5daa;--hf:#e8ddf5;
+  --constr:var(--warn);--cf:var(--warnf);
+  --ec:var(--edge);--ep:#d4a0a0;
+  --chk:rgba(61,111,160,0.07);
+  --bb:var(--btn);--bf:var(--btn-f);--bd:var(--btn-d);--cb:var(--code);
+  --grid-wall:#555568;--grid-free:#e8e8f0;--grid-agent:var(--a1);--grid-goal:var(--a2);--grid-path:var(--a1s);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) #mdd-section{
+  --heur:#9a7dbe;--hf:#2a2040;--ep:#5c3030;--chk:rgba(106,170,224,0.06);
+  --grid-wall:#888;--grid-free:#222238;
+}}
+:root[data-theme="dark"] #mdd-section{
+  --heur:#9a7dbe;--hf:#2a2040;--ep:#5c3030;--chk:rgba(106,170,224,0.06);
+  --grid-wall:#888;--grid-free:#222238;
+}
+#mdd-section svg .nc{stroke-width:2;transition:fill .3s,stroke .3s,opacity .3s}
+#mdd-section svg .nc.s-a{fill:var(--nf);stroke:var(--ns);opacity:1}
+#mdd-section svg .nc.s-p{fill:var(--pf);stroke:var(--ps);opacity:.45;stroke-dasharray:4 2}
+#mdd-section svg .nc.s-s{fill:var(--sf);stroke:var(--ss);opacity:1}
+#mdd-section svg .nl{transition:fill .3s,opacity .3s;font-family:'JetBrains Mono',monospace}
+#mdd-section svg .nl.s-a{fill:var(--nt);opacity:1}
+#mdd-section svg .nl.s-p{fill:var(--pt);opacity:.45}
+#mdd-section svg .nl.s-s{fill:var(--st);opacity:1}
+#mdd-section svg .el{transition:stroke .3s,opacity .3s}
+#mdd-section svg .el.s-a{stroke:var(--ec);stroke-width:1.5;opacity:.5}
+#mdd-section svg .el.s-p{stroke:var(--ep);stroke-width:1;opacity:.18;stroke-dasharray:4 3}
+#mdd-section svg .el.s-s{stroke:var(--ss);stroke-width:1.5;opacity:.6}
+#mdd-section svg .fwd-node{fill:var(--nf);stroke:var(--ns);stroke-width:2}
+#mdd-section svg .fwd-label{fill:var(--nt);font-family:'JetBrains Mono',monospace}
+#mdd-section svg .fwd-edge{stroke:var(--ec);stroke-width:1.5}
+#mdd-section svg .lbg{fill:var(--chk);transition:opacity .3s}
+#mdd-section svg .tlbl{font-family:'JetBrains Mono',monospace;font-size:12px;fill:var(--muted)}
+#mdd-section .hp{color:var(--ps);font-weight:600}
+#mdd-section .hs{color:var(--ss);font-weight:600}
+#mdd-section .hh{color:var(--heur);font-weight:500}
+#mdd-section .hc{color:var(--constr);font-weight:500}
+
+.mdd-tabs{display:flex;gap:0;margin-bottom:14px}
+.mdd-tab{flex:1;padding:8px 12px;text-align:center;font-family:'JetBrains Mono',monospace;
+  font-size:.78rem;cursor:pointer;border:1px solid var(--border);
+  background:var(--code);color:var(--muted);transition:background .2s,color .2s}
+.mdd-tab:first-child{border-radius:6px 0 0 6px}
+.mdd-tab:last-child{border-radius:0 6px 6px 0}
+.mdd-tab:not(:first-child){border-left:0}
+.mdd-tab.active{background:var(--btn);color:var(--btn-f);border-color:var(--btn)}
+
+.mdd-grid{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.mdd-grid-fig{flex:0 0 auto}
+.mdd-grid-fig svg text{font-family:'JetBrains Mono',monospace}
+.mdd-grid-info{flex:1 1 200px;min-width:0;font-size:.82rem;line-height:1.65}
+.mdd-grid-info code{font-family:'JetBrains Mono',monospace;font-size:.78rem;
+  background:var(--code);padding:1px 5px;border-radius:3px}
+
+details.mdd-expand{margin-top:14px}
+details.mdd-expand>summary{font-family:'JetBrains Mono',monospace;font-size:.82rem;
+  font-weight:600;cursor:pointer;padding:12px 18px;background:var(--code);
+  border:1px solid var(--border);border-radius:8px;color:var(--a1);
+  transition:background .2s;list-style:none}
+details.mdd-expand>summary::-webkit-details-marker{display:none}
+details.mdd-expand>summary::before{content:'▸ ';transition:transform .2s}
+details.mdd-expand[open]>summary::before{content:'▾ '}
+details.mdd-expand>summary:hover{background:var(--a1f)}
+details.mdd-expand[open]>summary{border-radius:8px 8px 0 0;border-bottom-color:transparent}
+details.mdd-expand>.mdd-content{border:1px solid var(--border);border-top:0;
+  border-radius:0 0 8px 8px;padding:18px;background:var(--surface)}
+
+/* Comparison section */
+.cmp-tabs{display:flex;gap:0;margin-bottom:14px}
+.cmp-tab{flex:1;padding:10px 12px;text-align:center;font-family:'JetBrains Mono',monospace;
+  font-size:.76rem;cursor:pointer;border:1px solid var(--border);
+  background:var(--code);color:var(--muted);transition:background .2s,color .2s}
+.cmp-tab:first-child{border-radius:6px 0 0 6px}
+.cmp-tab:last-child{border-radius:0 6px 6px 0}
+.cmp-tab:not(:first-child){border-left:0}
+.cmp-tab.active{background:var(--btn);color:var(--btn-f);border-color:var(--btn)}
+
+.cmp-row{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.cmp-fig{flex:0 0 auto;min-width:0}
+.cmp-detail{flex:1 1 260px;min-width:0}
+
+.bar-chart{display:flex;gap:16px;align-items:flex-end;height:120px;padding:0 8px;margin:14px 0 6px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.bar-fill{width:100%;max-width:80px;border-radius:4px 4px 0 0;transition:height .4s ease;min-height:4px}
+.bar-label{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted);text-align:center}
+.bar-val{font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums}
+
+.slider-row{display:flex;align-items:center;gap:12px;margin:12px 0;font-size:.82rem}
+.slider-row input[type=range]{flex:1;max-width:200px;accent-color:var(--a1)}
+.slider-row .slider-val{font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--a1);min-width:28px}
+
+.grid-cell{transition:fill .2s}
+.path-line{stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.7}
+</style>
+
+<h1>Conflict-Based Search (CBS)</h1>
+<p class="sub">
+  <strong>TLDR:</strong> CBS solves multi-agent pathfinding optimally by splitting the problem into
+  two levels — a high-level Constraint Tree that resolves inter-agent conflicts by branching,
+  and a low-level A* that replans individual agents under constraints. This avoids the
+  exponential joint state space of traditional A* while guaranteeing optimal sum-of-costs solutions.
+  MA-CBS extends this by adaptively merging strongly-coupled agents into meta-agents
+  to handle pathological open-space cases.
+  <br><br>
+  G. Sharon, R. Stern, A. Felner, N.R. Sturtevant.
+  "Conflict-based search for optimal multi-agent pathfinding."
+  <em>Artificial Intelligence</em>, 219, pp. 40–66, 2015.
+  <a href="https://doi.org/10.1016/j.artint.2014.11.006" target="_blank" rel="noopener" style="color:var(--a1)">doi:10.1016/j.artint.2014.11.006</a>
+</p>
+
+<!-- ============================================================ -->
+<h2>1. The MAPF Problem</h2>
+<!-- ============================================================ -->
+<div class="card"><div class="card-body">
+  <div class="concept">
+    <div class="concept-fig">
+      <svg id="problem-graph" viewBox="0 0 380 310" width="320" height="260">
+        <!-- Edges -->
+        <line x1="80" y1="45" x2="80" y2="115" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="300" y1="45" x2="300" y2="115" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="80" y1="115" x2="190" y2="195" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="300" y1="115" x2="190" y2="195" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="190" y1="195" x2="80" y2="275" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="190" y1="195" x2="300" y2="275" stroke="var(--edge)" stroke-width="2"/>
+        <!-- Nodes -->
+        <circle cx="80" cy="45" r="22" fill="var(--a1f)" stroke="var(--a1)" stroke-width="2.5"/>
+        <text x="80" y="49" text-anchor="middle" fill="var(--a1t)" font-size="11" font-weight="600">S₁</text>
+        <circle cx="300" cy="45" r="22" fill="var(--a2f)" stroke="var(--a2)" stroke-width="2.5"/>
+        <text x="300" y="49" text-anchor="middle" fill="var(--a2t)" font-size="11" font-weight="600">S₂</text>
+        <circle cx="80" cy="115" r="18" fill="var(--node)" stroke="var(--node-s)" stroke-width="2"/>
+        <text x="80" y="119" text-anchor="middle" fill="var(--fg)" font-size="11" font-weight="500">A₁</text>
+        <circle cx="300" cy="115" r="18" fill="var(--node)" stroke="var(--node-s)" stroke-width="2"/>
+        <text x="300" y="119" text-anchor="middle" fill="var(--fg)" font-size="11" font-weight="500">B₁</text>
+        <circle cx="190" cy="195" r="22" fill="var(--node)" stroke="var(--node-s)" stroke-width="2.5"/>
+        <text x="190" y="199" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="600">D</text>
+        <circle cx="80" cy="275" r="22" fill="var(--a1f)" stroke="var(--a1)" stroke-width="2.5" stroke-dasharray="5 3"/>
+        <text x="80" y="279" text-anchor="middle" fill="var(--a1t)" font-size="11" font-weight="600">G₁</text>
+        <circle cx="300" cy="275" r="22" fill="var(--a2f)" stroke="var(--a2)" stroke-width="2.5" stroke-dasharray="5 3"/>
+        <text x="300" y="279" text-anchor="middle" fill="var(--a2t)" font-size="11" font-weight="600">G₂</text>
+      </svg>
+    </div>
+    <div class="concept-text">
+      <h3>Input</h3>
+      <strong>(1)</strong> A graph G(V, E).<br>
+      <strong>(2)</strong> <em>k</em> agents, each with a start and goal vertex.<br><br>
+      <span class="ha1">Agent a₁</span>: S₁ → G₁<br>
+      <span class="ha2">Agent a₂</span>: S₂ → G₂<br><br>
+      <strong>Constraint:</strong> No two agents may occupy the same vertex at the same time.<br>
+      <strong>Objective:</strong> Minimize the <em>sum of costs</em> — the total path lengths of all agents.<br><br>
+      Node <strong>D</strong> is a bottleneck — both agents must pass through it.
+      Their individual shortest paths both traverse D at timestep 2.
+    </div>
+  </div>
+</div></div>
+
+<!-- ============================================================ -->
+<h2>2. The Conflict</h2>
+<!-- ============================================================ -->
+<p class="section-intro">
+  When agents are planned independently, their paths may collide.
+  A <strong>conflict</strong> is a tuple ⟨aᵢ, aⱼ, v, t⟩ — two agents at the same vertex at the same time.
+</p>
+<div class="card">
+  <div class="graph-wrap">
+    <svg id="conflict-svg" viewBox="0 0 380 310" width="320" height="260" style="min-width:280px"></svg>
+  </div>
+  <div class="bar">
+    <button id="c-prev" onclick="conflictGo(-1)">&#8592;</button>
+    <span class="slab" id="c-slab"></span>
+    <button id="c-next" onclick="conflictGo(1)">&#8594;</button>
+  </div>
+</div>
+<div class="card"><div class="desc" id="c-desc"></div></div>
+<div class="legend">
+  <div class="legend-i"><div class="ldot" style="background:var(--a1f);border:2px solid var(--a1)"></div> Agent a₁</div>
+  <div class="legend-i"><div class="ldot" style="background:var(--a2f);border:2px solid var(--a2)"></div> Agent a₂</div>
+  <div class="legend-i"><div class="ldot" style="background:var(--conflict);border:2px solid var(--conflict)"></div> Conflict</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>3. CBS: Two-Level Architecture</h2>
+<!-- ============================================================ -->
+<div class="card"><div class="card-body">
+  <div class="concept-text" style="max-width:100%">
+    CBS splits the problem into two levels:<br><br>
+    <strong>High level</strong> — searches a <em>Constraint Tree</em> (CT), a binary tree where each node
+    holds a set of constraints and a solution (set of paths). Best-first search on the CT
+    orders nodes by their total cost. When a conflict is found, the node splits into two children,
+    each adding one new constraint.<br><br>
+    <strong>Low level</strong> — for each CT node, runs A* to find the shortest path for an individual agent
+    that satisfies all its constraints. The search space is (vertex, time) pairs — a state
+    <code>(v, t)</code> is pruned if the constraint <code>(aᵢ, v, t)</code> exists.
+  </div>
+  <div class="algo-box">
+    <div><span class="ln">1</span><strong>function</strong> CBS(MAPF):</div>
+    <div><span class="ln">2</span>  Root.constraints ← ∅</div>
+    <div><span class="ln">3</span>  Root.solution ← findIndividualPaths()</div>
+    <div><span class="ln">4</span>  Root.cost ← SIC(Root.solution)</div>
+    <div><span class="ln">5</span>  insert Root into OPEN</div>
+    <div><span class="ln">6</span>  <strong>while</strong> OPEN not empty:</div>
+    <div><span class="ln">7</span>    P ← best node from OPEN</div>
+    <div><span class="ln">8</span>    validate P until conflict found</div>
+    <div><span class="ln">9</span>    <strong>if</strong> no conflict: <strong>return</strong> P.solution</div>
+    <div><span class="ln">10</span>   C ← first conflict ⟨aᵢ, aⱼ, v, t⟩</div>
+    <div><span class="ln">11</span>   <strong>for each</strong> agent aₓ in {aᵢ, aⱼ}:</div>
+    <div><span class="ln">12</span>     A ← new node</div>
+    <div><span class="ln">13</span>     A.constraints ← P.constraints + (aₓ, v, t)</div>
+    <div><span class="ln">14</span>     A.solution ← replan aₓ via low-level</div>
+    <div><span class="ln">15</span>     A.cost ← SIC(A.solution)</div>
+    <div><span class="ln">16</span>     insert A into OPEN</div>
+  </div>
+</div></div>
+
+<!-- ============================================================ -->
+<h2>4. Constraint Tree Construction</h2>
+<!-- ============================================================ -->
+<p class="section-intro">
+  Step through the CBS algorithm on our example. The CT grows as conflicts are
+  discovered and resolved by adding constraints.
+</p>
+<div class="card">
+  <div class="graph-wrap">
+    <svg id="ct-svg" viewBox="0 0 720 380" width="100%" style="min-width:500px"></svg>
+  </div>
+  <div class="bar">
+    <button id="ct-prev" onclick="ctGo(-1)">&#8592;</button>
+    <span class="slab" id="ct-slab"></span>
+    <button id="ct-next" onclick="ctGo(1)">&#8594;</button>
+  </div>
+</div>
+<div class="card"><div class="desc" id="ct-desc"></div></div>
+
+<!-- ============================================================ -->
+<h2>5. Low-Level Search with Constraints</h2>
+<!-- ============================================================ -->
+<p class="section-intro">
+  The low-level search is A* in (vertex, time) space. A constraint
+  <code>(aᵢ, v, t)</code> blocks state <code>(v, t)</code>, forcing the agent to find an alternative.
+</p>
+<div class="card">
+  <div class="graph-wrap">
+    <svg id="ll-svg" viewBox="0 0 620 340" width="100%" style="min-width:460px"></svg>
+  </div>
+  <div class="bar">
+    <button id="ll-prev" onclick="llGo(-1)">&#8592;</button>
+    <span class="slab" id="ll-slab"></span>
+    <button id="ll-next" onclick="llGo(1)">&#8594;</button>
+  </div>
+</div>
+<div class="card"><div class="desc" id="ll-desc"></div></div>
+<div class="legend">
+  <div class="legend-i"><div class="ldot" style="background:var(--a1f);border:2px solid var(--a1)"></div> Explored</div>
+  <div class="legend-i"><div class="ldot" style="background:var(--okf);border:2px solid var(--ok)"></div> Solution path</div>
+  <div class="legend-i"><div class="ldot" style="background:var(--warnf);border:2px solid var(--warn)"></div> Constrained (blocked)</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>6. Multi-Valued Decision Diagram (MDD)</h2>
+<!-- ============================================================ -->
+<p class="section-intro">
+  An MDD compactly stores <strong>all optimal-cost paths</strong> for a single agent from start to goal.
+  Each level of the MDD corresponds to a timestep, and each node is a vertex
+  the agent can occupy at that time while still reaching the goal optimally.
+</p>
+<div class="card"><div class="card-body">
+  <div class="concept-text" style="max-width:100%">
+    <strong>Why MDDs matter for CBS:</strong> An MDD for agent <em>aᵢ</em> with cost <em>cᵢ</em>
+    is the set of all vertices reachable at each timestep along some optimal path.
+    CBS uses MDDs to classify conflicts:<br><br>
+    <strong>Cardinal conflict:</strong> Both agents' MDDs have width 1 at the conflicting timestep —
+    resolving the conflict <em>must</em> increase the cost of at least one agent.
+    CBS should prioritize these conflicts.<br><br>
+    <strong>Semi-cardinal:</strong> Only one MDD has width 1 — the cost of one agent must increase.<br><br>
+    <strong>Non-cardinal:</strong> Both MDDs have width &gt; 1 — the agents may reroute without cost increase.<br><br>
+    <strong>Construction:</strong> An MDD is built in two passes over a <code>levels_</code> vector:<br>
+    <strong>1. Forward pass</strong> — BFS from Start, keeping only vertices where
+    <code>t + h(v) ≤ optimal_cost</code>.<br>
+    <strong>2. Backward pass</strong> — from Goal back to Start, pruning any vertex
+    that cannot reach a surviving vertex in the next level. This removes dead ends
+    caused by constraints that block future timesteps.
+  </div>
+</div></div>
+
+<details class="mdd-expand" id="mdd-details">
+  <summary>Click to view interactive MDD construction demo</summary>
+  <div class="mdd-content" id="mdd-section">
+
+    <h3 style="margin:0 0 10px">Example Setup</h3>
+    <div class="card"><div class="card-body">
+      <div class="mdd-grid">
+        <div class="mdd-grid-fig">
+          <svg viewBox="0 0 200 200" width="180" height="180">
+            <rect x="10" y="10" width="40" height="40" rx="4" fill="var(--nf)" stroke="var(--ns)" stroke-width="1"/>
+            <rect x="55" y="10" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="100" y="10" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="145" y="10" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="10" y="55" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="55" y="55" width="40" height="40" rx="4" fill="var(--grid-wall)" stroke="var(--grid-wall)" stroke-width="1" opacity=".35"/>
+            <rect x="100" y="55" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="145" y="55" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="10" y="100" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="55" y="100" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="100" y="100" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="145" y="100" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="10" y="145" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="55" y="145" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="100" y="145" width="40" height="40" rx="4" fill="var(--grid-free)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="145" y="145" width="40" height="40" rx="4" fill="var(--pf)" stroke="var(--ps)" stroke-width="1"/>
+            <text x="30" y="35" text-anchor="middle" fill="var(--ns)" font-size="13" font-weight="600">S</text>
+            <text x="75" y="80" text-anchor="middle" fill="var(--grid-wall)" font-size="11" font-weight="500">wall</text>
+            <text x="165" y="170" text-anchor="middle" fill="var(--ps)" font-size="13" font-weight="600">G</text>
+            <text x="30" y="198" text-anchor="middle" fill="var(--muted2)" font-size="9">0</text>
+            <text x="75" y="198" text-anchor="middle" fill="var(--muted2)" font-size="9">1</text>
+            <text x="120" y="198" text-anchor="middle" fill="var(--muted2)" font-size="9">2</text>
+            <text x="165" y="198" text-anchor="middle" fill="var(--muted2)" font-size="9">3</text>
+            <text x="3" y="35" text-anchor="end" fill="var(--muted2)" font-size="9">0</text>
+            <text x="3" y="80" text-anchor="end" fill="var(--muted2)" font-size="9">1</text>
+            <text x="3" y="125" text-anchor="end" fill="var(--muted2)" font-size="9">2</text>
+            <text x="3" y="170" text-anchor="end" fill="var(--muted2)" font-size="9">3</text>
+          </svg>
+        </div>
+        <div class="mdd-grid-info">
+          <strong>4 × 4 grid</strong>, Start = (0,0), Goal = (3,3)<br>
+          Obstacle at (1,1). <code>optimal_cost = 6</code><br><br>
+          Agent has a <span class="hc">constraint</span>: blocked from (3,2) at t=5 (another agent is there).<br><br>
+          The heuristic (BFS from Goal, ignoring agents) gives the shortest distance from any cell to Goal.
+          The forward pass uses it to prune cells that are too far away.
+        </div>
+      </div>
+    </div></div>
+
+    <!-- Phase tabs -->
+    <div class="mdd-tabs">
+      <div class="mdd-tab active" id="mdd-tab-fwd" onclick="mddSetPhase('fwd')">Forward Pass</div>
+      <div class="mdd-tab" id="mdd-tab-bwd" onclick="mddSetPhase('bwd')">Why Backward?</div>
+      <div class="mdd-tab" id="mdd-tab-dag" onclick="mddSetPhase('dag')">Backward Pass</div>
+    </div>
+
+    <!-- Forward pass -->
+    <div id="mdd-phase-fwd">
+      <div class="card">
+        <div class="graph-wrap">
+          <svg id="mdd-fwd-graph" viewBox="0 0 760 380" width="100%" style="min-width:540px"></svg>
+        </div>
+        <div class="bar">
+          <button id="mdd-fp" onclick="mddFwdGo(-1)">&#8592;</button>
+          <span class="slab" id="mdd-fsl"></span>
+          <button id="mdd-fn" onclick="mddFwdGo(1)">&#8594;</button>
+        </div>
+      </div>
+      <div class="card"><div class="desc" id="mdd-fdesc"></div></div>
+    </div>
+
+    <!-- Why backward -->
+    <div id="mdd-phase-bwd" hidden>
+      <div class="card"><div class="card-body" style="font-size:.84rem;line-height:1.7">
+        <strong>The forward pass is greedy — it can't see the future.</strong><br><br>
+        At each timestep t, it adds every cell that is:
+        <ol style="margin:8px 0 8px 20px;padding:0">
+          <li>Reachable from some cell in <code>levels_[t]</code></li>
+          <li>Close enough to Goal: <code>t+1 + h(cell) ≤ optimal_cost</code></li>
+          <li>Not blocked by a vertex or edge constraint at t+1</li>
+        </ol>
+        But it never checks whether a cell at t+1 can <em>actually</em> reach Goal through
+        <code>levels_[t+2], levels_[t+3], ...</code> — constraints at future timesteps might block
+        every onward path.<br><br>
+
+        <strong>Example:</strong> Cell (3,1) at t=4 passes all forward checks —
+        it's reachable from (3,0) at t=3, and <code>4 + h(3,1) = 4+2 = 6 = optimal_cost</code> ✓.
+        Its only h-feasible successor is (3,2) at t=5. But (3,2) is
+        <span class="hc">blocked at t=5</span> by another agent's constraint.
+        So (3,1) at t=4 is a <span class="hp">dead end</span> — reachable from Start,
+        but unable to reach Goal.<br><br>
+
+        The <span class="hs">backward pass</span> catches this: starting from Goal and working back,
+        it keeps only cells that can reach a survivor at the next level.
+        Dead ends are pruned, and the pruning <em>cascades</em>: (3,1) is pruned,
+        which makes (3,0) at t=3 a dead end too (its only successor was (3,1)).
+        Meanwhile, paths through (2,3) at t=5 survive.
+      </div></div>
+    </div>
+
+    <!-- Backward pass DAG -->
+    <div id="mdd-phase-dag" hidden>
+      <div class="card">
+        <div class="graph-wrap">
+          <svg id="mdd-dag-graph" viewBox="0 0 740 410" width="100%" style="min-width:520px"></svg>
+        </div>
+        <div class="bar">
+          <button id="mdd-bp" onclick="mddDagGo(-1)">&#8592;</button>
+          <span class="slab" id="mdd-dsl"></span>
+          <button id="mdd-bn" onclick="mddDagGo(1)">&#8594;</button>
+        </div>
+      </div>
+      <div class="card"><div class="desc" id="mdd-ddesc"></div></div>
+      <div class="legend">
+        <div class="legend-i"><div class="ldot" style="background:var(--nf);border:2px solid var(--ns)"></div> Active</div>
+        <div class="legend-i"><div class="ldot" style="background:var(--sf);border:2px solid var(--ss)"></div> Surviving set</div>
+        <div class="legend-i"><div class="ldot" style="background:var(--pf);border:2px solid var(--ps);opacity:.55"></div> Pruned</div>
+      </div>
+    </div>
+
+  </div>
+</details>
+
+<!-- ============================================================ -->
+<h2>7. CBS vs A*: When Each Wins</h2>
+<!-- ============================================================ -->
+<p class="section-intro">
+  CBS and A* have complementary strengths. The topology of the map determines which algorithm
+  expands fewer nodes. Toggle between the two scenarios from the paper.
+</p>
+
+<div class="cmp-tabs">
+  <div class="cmp-tab active" id="cmp-tab-bottle" onclick="setCmpTab('bottle')">Bottleneck — CBS Wins</div>
+  <div class="cmp-tab" id="cmp-tab-open" onclick="setCmpTab('open')">Open Space — A* Wins</div>
+</div>
+
+<!-- Bottleneck tab -->
+<div id="cmp-bottle">
+  <div class="card"><div class="card-body">
+    <div class="cmp-row">
+      <div class="cmp-fig">
+        <svg id="bottle-svg" viewBox="0 0 360 310" width="300" height="260"></svg>
+      </div>
+      <div class="cmp-detail">
+        <h3>Fig. 1 — Bottleneck graph</h3>
+        <span class="ha1">a₁</span>: S₁ → A₁ → … → A<sub>m</sub> → D → G₁<br>
+        <span class="ha2">a₂</span>: S₂ → B₁ → … → B<sub>m</sub> → D → G₂<br><br>
+        Both agents must pass through <strong>D</strong> — a single bottleneck.
+        There is exactly <strong>one conflict</strong> regardless of <em>m</em>.<br><br>
+
+        <div class="slider-row">
+          <label>m =</label>
+          <input type="range" id="m-slider" min="1" max="10" value="3" oninput="updateBottle()">
+          <span class="slider-val" id="m-val">3</span>
+        </div>
+
+        <div class="bar-chart" id="bottle-bars">
+          <div class="bar-col">
+            <div class="bar-val" id="bottle-cbs-val"></div>
+            <div class="bar-fill" id="bottle-cbs-bar" style="background:var(--a1)"></div>
+            <div class="bar-label">CBS<br>low-level</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar-val" id="bottle-astar-val"></div>
+            <div class="bar-fill" id="bottle-astar-bar" style="background:var(--a2)"></div>
+            <div class="bar-label">A*<br>joint states</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <div class="card"><div class="desc" id="bottle-desc"></div></div>
+</div>
+
+<!-- Open space tab -->
+<div id="cmp-open" hidden>
+  <div class="card"><div class="card-body">
+    <div class="cmp-row">
+      <div class="cmp-fig">
+        <svg id="open-svg" viewBox="0 0 260 310" width="230" height="270"></svg>
+      </div>
+      <div class="cmp-detail">
+        <h3>Fig. 6 — Open space grid</h3>
+        <span class="ha1">a₁</span>: (2,D) → (3,A)<br>
+        <span class="ha2">a₂</span>: (1,C) → (4,B)<br><br>
+        Both agents must cross the <strong>open area</strong> (grey cells).
+        Every combination of optimal paths conflicts somewhere inside it.<br><br>
+
+        <div class="bar-chart" id="open-bars">
+          <div class="bar-col">
+            <div class="bar-val hconflict">54</div>
+            <div class="bar-fill" style="background:var(--a1);height:90%"></div>
+            <div class="bar-label">CBS<br>low-level</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar-val hok">8</div>
+            <div class="bar-fill" style="background:var(--a2);height:13%"></div>
+            <div class="bar-label">A*<br>joint states</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <div class="card"><div class="desc" id="open-desc"></div></div>
+
+  <div class="card">
+    <div class="graph-wrap">
+      <svg id="open-ct-svg" viewBox="0 0 720 340" width="100%" style="min-width:500px"></svg>
+    </div>
+    <div class="bar">
+      <button id="oc-prev" onclick="openCtGo(-1)">&#8592;</button>
+      <span class="slab" id="oc-slab"></span>
+      <button id="oc-next" onclick="openCtGo(1)">&#8594;</button>
+    </div>
+  </div>
+  <div class="card"><div class="desc" id="oc-desc"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<h2>8. Meta-Agent CBS (MA-CBS)</h2>
+<!-- ============================================================ -->
+<div class="card"><div class="card-body">
+  <div class="concept">
+    <div class="concept-fig">
+      <svg viewBox="0 0 300 200" width="260" height="180">
+        <!-- Two separate agents -->
+        <circle cx="60" cy="50" r="16" fill="var(--a1f)" stroke="var(--a1)" stroke-width="2"/>
+        <text x="60" y="54" text-anchor="middle" fill="var(--a1t)" font-size="10" font-weight="600">a₁</text>
+        <circle cx="120" cy="50" r="16" fill="var(--a2f)" stroke="var(--a2)" stroke-width="2"/>
+        <text x="120" y="54" text-anchor="middle" fill="var(--a2t)" font-size="10" font-weight="600">a₂</text>
+        <!-- Arrow down -->
+        <text x="90" y="95" text-anchor="middle" fill="var(--muted)" font-size="12">↓ merge</text>
+        <!-- Meta-agent -->
+        <rect x="38" y="110" width="104" height="40" rx="8" fill="var(--okf)" stroke="var(--ok)" stroke-width="2"/>
+        <text x="90" y="134" text-anchor="middle" fill="var(--okt)" font-size="10" font-weight="600">a₍₁,₂₎</text>
+        <!-- B parameter -->
+        <text x="220" y="50" text-anchor="middle" fill="var(--muted)" font-size="10">conflicts &gt; B</text>
+        <text x="220" y="70" text-anchor="middle" fill="var(--warn)" font-size="11" font-weight="600">→ merge</text>
+        <text x="220" y="110" text-anchor="middle" fill="var(--muted)" font-size="10">B = ∞: basic CBS</text>
+        <text x="220" y="130" text-anchor="middle" fill="var(--muted)" font-size="10">B = 0: always merge (ID)</text>
+        <text x="220" y="160" text-anchor="middle" fill="var(--ok)" font-size="10" font-weight="500">0 &lt; B &lt; ∞: best of both</text>
+      </svg>
+    </div>
+    <div class="concept-text">
+      <h3>Adaptive Merging</h3>
+      When a pair of agents conflicts more than <em>B</em> times, MA-CBS
+      merges them into a <strong>meta-agent</strong> — solved by a joint MAPF solver
+      at the low level instead of individual A* searches.<br><br>
+      <strong>B = ∞</strong> is basic CBS (never merge).<br>
+      <strong>B = 0</strong> always merges on first conflict, equivalent to the Independence Detection (ID) framework.<br>
+      <strong>0 &lt; B &lt; ∞</strong> adapts: loosely-coupled agents stay separate (CBS advantage),
+      strongly-coupled agents merge (joint-solver advantage).<br><br>
+      Experiments show MA-CBS with intermediate B values outperforms both
+      basic CBS and pure joint A* across most map topologies.
+    </div>
+  </div>
+</div></div>
+
+<!-- ============================================================ -->
+<h2>9. Properties</h2>
+<!-- ============================================================ -->
+<div class="card"><div class="card-body" style="font-size:.83rem;line-height:1.75">
+  <strong>Optimality.</strong> CBS performs best-first search on the CT ordered by total cost.
+  Since each CT node's cost is a lower bound on all solutions it permits (Lemma 1),
+  the first goal node found is optimal (Theorem 1).<br><br>
+  <strong>Completeness.</strong> For any cost C, there are finitely many CT nodes with cost ≤ C
+  (Theorem 2). CBS systematically explores them, so it will find a solution if one exists
+  (Theorem 3). It will not detect unsolvable instances on its own — a separate
+  solvability check is needed.<br><br>
+  <strong>Implementation notes.</strong> Each CT node stores only its <em>delta</em> — the new constraint
+  and replanned path. The full constraint set and solution are reconstructed by walking to the root.
+  This keeps CT nodes cheap and lets the tree grow large. Duplicate detection and tie-breaking
+  by conflict count (conflict avoidance table) provide additional speedups.
+</div></div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function svgEl(tag,attrs){
+  const e=document.createElementNS(NS,tag);
+  for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);
+  return e;
+}
+
+/* ================================================================
+   GRAPH NODE POSITIONS (shared across demos)
+   ================================================================ */
+const NODES={
+  S1:{x:80,y:45}, S2:{x:300,y:45},
+  A1:{x:80,y:115}, B1:{x:300,y:115},
+  D:{x:190,y:195},
+  G1:{x:80,y:275}, G2:{x:300,y:275}
+};
+const EDGES=[['S1','A1'],['S2','B1'],['A1','D'],['B1','D'],['D','G1'],['D','G2']];
+
+function drawGraph(svg,opts={}){
+  const {highlight,agents,conflictAt,showLabels=true}=opts;
+  svg.innerHTML='';
+
+  for(const[a,b]of EDGES){
+    const pa=NODES[a],pb=NODES[b];
+    let stroke='var(--edge)', sw='2', dash='';
+    if(highlight){
+      const h1=highlight.a1||[], h2=highlight.a2||[];
+      const onA1=isEdgeInPath(a,b,h1), onA2=isEdgeInPath(a,b,h2);
+      if(onA1) {stroke='var(--a1s)';sw='3';}
+      if(onA2) {stroke='var(--a2s)';sw='3';}
+      if(onA1&&onA2) {stroke='var(--muted)';sw='2.5';dash='5 3';}
+    }
+    svg.appendChild(svgEl('line',{x1:pa.x,y1:pa.y,x2:pb.x,y2:pb.y,
+      stroke,['stroke-width']:sw,['stroke-dasharray']:dash}));
+  }
+
+  for(const[name,pos]of Object.entries(NODES)){
+    let fill='var(--node)',strokeC='var(--node-s)',r='18',sw='2',labelFill='var(--fg)';
+    const isA1Start=name==='S1'||name==='G1';
+    const isA2Start=name==='S2'||name==='G2';
+    if(isA1Start){fill='var(--a1f)';strokeC='var(--a1)';sw='2.5';r='22';labelFill='var(--a1t)';}
+    if(isA2Start){fill='var(--a2f)';strokeC='var(--a2)';sw='2.5';r='22';labelFill='var(--a2t)';}
+    if(name==='D'){r='22';sw='2.5';}
+    if(name==='G1'||name==='G2'){
+      svg.appendChild(svgEl('circle',{cx:pos.x,cy:pos.y,r,fill,stroke:strokeC,
+        ['stroke-width']:sw,['stroke-dasharray']:'5 3'}));
+    } else {
+      svg.appendChild(svgEl('circle',{cx:pos.x,cy:pos.y,r,fill,stroke:strokeC,['stroke-width']:sw}));
+    }
+    if(showLabels){
+      const sub={'S1':'S₁','S2':'S₂','A1':'A₁','B1':'B₁','G1':'G₁','G2':'G₂'};
+      svg.appendChild(svgEl('text',{x:pos.x,y:pos.y+4,'text-anchor':'middle',
+        fill:labelFill,'font-size':name==='D'?'13':'11','font-weight':name==='D'?'600':'500'}))
+        .textContent=sub[name]||name;
+    }
+  }
+
+  if(conflictAt){
+    const p=NODES[conflictAt];
+    const ring=svgEl('circle',{cx:p.x,cy:p.y,r:'30',fill:'none',
+      stroke:'var(--conflict)',['stroke-width']:'3',opacity:'.8',class:'pulse'});
+    svg.appendChild(ring);
+  }
+
+  if(agents){
+    for(const ag of agents){
+      const p=NODES[ag.at];
+      svg.appendChild(svgEl('circle',{cx:p.x,cy:p.y,r:'10',
+        fill:ag.color,opacity:'.9',class:'agent-marker'}));
+      svg.appendChild(svgEl('text',{x:p.x,y:p.y+3.5,'text-anchor':'middle',
+        fill:'#fff','font-size':'8','font-weight':'700',class:'agent-marker'}))
+        .textContent=ag.label;
+    }
+  }
+}
+
+function isEdgeInPath(a,b,path){
+  for(let i=0;i<path.length-1;i++){
+    if((path[i]===a&&path[i+1]===b)||(path[i]===b&&path[i+1]===a))return true;
+  }
+  return false;
+}
+
+/* ================================================================
+   SECTION 2: CONFLICT ANIMATION
+   ================================================================ */
+const unconstrainedA1=['S1','A1','D','G1'];
+const unconstrainedA2=['S2','B1','D','G2'];
+const conflictSteps=[
+  {t:-1,a1:'S1',a2:'S2',desc:`<strong>Individual shortest paths</strong> (ignoring other agents):<br><br>
+    <span class="ha1">a₁</span>: S₁ → A₁ → D → G₁  (cost 3)<br>
+    <span class="ha2">a₂</span>: S₂ → B₁ → D → G₂  (cost 3)<br><br>
+    Total cost = 6. But are these paths compatible?`},
+  {t:0,a1:'S1',a2:'S2',desc:`<strong>t = 0:</strong>
+    <span class="ha1">a₁</span> at S₁, <span class="ha2">a₂</span> at S₂.<br>No conflict. ✓`},
+  {t:1,a1:'A1',a2:'B1',desc:`<strong>t = 1:</strong>
+    <span class="ha1">a₁</span> moves to A₁, <span class="ha2">a₂</span> moves to B₁.<br>No conflict. ✓`},
+  {t:2,a1:'D',a2:'D',conflict:true,desc:`<strong>t = 2:</strong>
+    <span class="ha1">a₁</span> at D, <span class="ha2">a₂</span> at D.<br><br>
+    <span class="hconflict">CONFLICT!</span> Both agents occupy vertex D at time 2.<br>
+    Conflict C = ⟨a₁, a₂, D, 2⟩<br><br>
+    This solution is <em>invalid</em>. CBS must resolve this conflict.`},
+  {t:3,a1:'G1',a2:'G2',desc:`<strong>t = 3:</strong>
+    Both would reach their goals — but the solution was already invalidated at t=2.<br><br>
+    <em>At least one agent must take a longer path to avoid the conflict at D.</em>`}
+];
+let conflictCur=0;
+
+function conflictRender(){
+  const s=conflictSteps[conflictCur];
+  const hl=s.t>=0?{a1:unconstrainedA1.slice(0,s.t+1),a2:unconstrainedA2.slice(0,s.t+1)}:
+    {a1:unconstrainedA1,a2:unconstrainedA2};
+  drawGraph(document.getElementById('conflict-svg'),{
+    highlight:hl,
+    agents:s.t>=0?[
+      {at:s.a1,color:'var(--a1)',label:'1'},
+      {at:s.a2,color:'var(--a2)',label:'2'}
+    ]:null,
+    conflictAt:s.conflict?'D':null
+  });
+  document.getElementById('c-desc').innerHTML=s.desc;
+  document.getElementById('c-slab').textContent=
+    s.t<0?'Overview':'t = '+s.t;
+  document.getElementById('c-prev').disabled=conflictCur===0;
+  document.getElementById('c-next').disabled=conflictCur===conflictSteps.length-1;
+}
+function conflictGo(d){conflictCur=Math.max(0,Math.min(conflictSteps.length-1,conflictCur+d));conflictRender();}
+conflictRender();
+
+/* ================================================================
+   SECTION 4: CONSTRAINT TREE CONSTRUCTION
+   ================================================================ */
+const ctSvg=document.getElementById('ct-svg');
+
+function drawCTNode(svg,x,y,w,h,data,state){
+  const g=svgEl('g',{});
+  let fill='var(--ct-bg)',stroke='var(--ct-border)',sw='2';
+  if(state==='active'){stroke='var(--a1)';sw='2.5';}
+  if(state==='goal'){fill='var(--okf)';stroke='var(--ok)';sw='2.5';}
+  if(state==='conflict'){stroke='var(--conflict)';sw='2.5';}
+
+  g.appendChild(svgEl('rect',{x,y,width:w,height:h,rx:'8',fill,stroke,['stroke-width']:sw}));
+
+  let ty=y+18;
+  const addLine=(text,color,size='10',weight='500')=>{
+    const t=svgEl('text',{x:x+w/2,y:ty,'text-anchor':'middle',fill:color||'var(--fg)',
+      'font-size':size,'font-weight':weight});
+    t.textContent=text;
+    g.appendChild(t);
+    ty+=14;
+  };
+
+  if(data.title){addLine(data.title,'var(--muted)','9','600');ty+=2;}
+  if(data.con!==undefined){addLine('Con: '+data.con,'var(--warn)','9','500');}
+  if(data.sol){
+    for(const s of data.sol)addLine(s,'var(--fg)','9','400');
+  }
+  if(data.cost!==undefined){addLine('Cost: '+data.cost,state==='goal'?'var(--ok)':'var(--a1)','10','600');}
+  if(state==='goal'){
+    ty+=2;
+    addLine('✓ GOAL','var(--ok)','11','700');
+  }
+  svg.appendChild(g);
+  return g;
+}
+
+const ctSteps=[
+  {show:['root-empty'],active:'root',
+    desc:`<strong>Step 1: Create the root node.</strong><br><br>
+    The root of the Constraint Tree has an empty set of constraints.
+    CBS will now invoke the low-level solver to find an individual shortest path for each agent.`},
+  {show:['root'],active:'root',
+    desc:`<strong>Step 2: Low-level search finds shortest paths.</strong><br><br>
+    <span class="ha1">a₁</span>: S₁ → A₁ → D → G₁  (cost 3)<br>
+    <span class="ha2">a₂</span>: S₂ → B₁ → D → G₂  (cost 3)<br><br>
+    Total cost = SIC = 3 + 3 = <strong>6</strong>. The root is inserted into OPEN.`},
+  {show:['root'],active:'root',state:'conflict',
+    desc:`<strong>Step 3: Validate the solution.</strong><br><br>
+    CBS iterates through all timesteps, checking if any two agents share a vertex.<br><br>
+    t=0: S₁ ≠ S₂ ✓<br>
+    t=1: A₁ ≠ B₁ ✓<br>
+    t=2: D = D <span class="hconflict">✗ CONFLICT!</span><br><br>
+    Conflict found: C = ⟨a₁, a₂, D, 2⟩. The root is <em>not</em> a goal node.`},
+  {show:['root','edges','left-empty','right-empty'],active:null,
+    desc:`<strong>Step 4: Split into two children.</strong><br><br>
+    To resolve the conflict, CBS creates two child nodes — one for each possible restriction:<br><br>
+    <strong>Left:</strong> add constraint <span class="hwarn">(a₁, D, 2)</span> — a₁ may not be at D at t=2<br>
+    <strong>Right:</strong> add constraint <span class="hwarn">(a₂, D, 2)</span> — a₂ may not be at D at t=2<br><br>
+    Both children inherit all constraints from the parent.`},
+  {show:['root','edges','left','right-empty'],active:'left',
+    desc:`<strong>Step 5: Process the left child.</strong><br><br>
+    Re-plan <span class="ha1">a₁</span> with constraint (a₁, D, 2): a₁ cannot be at D at timestep 2.<br><br>
+    The low-level A* finds: S₁ → A₁ → <strong>A₁</strong> → D → G₁ (cost 4).<br>
+    Agent a₁ <em>waits</em> at A₁ for one step, then proceeds through D at t=3.<br>
+    <span class="ha2">a₂</span> is unchanged: S₂ → B₁ → D → G₂ (cost 3).<br>
+    Total cost = 4 + 3 = <strong>7</strong>.`},
+  {show:['root','edges','left-goal','right-empty'],active:'left',state:'goal',
+    desc:`<strong>Step 6: Validate the left child.</strong><br><br>
+    t=0: S₁ ≠ S₂ ✓<br>
+    t=1: A₁ ≠ B₁ ✓<br>
+    t=2: A₁ ≠ D ✓  (a₁ is waiting at A₁, a₂ passes through D)<br>
+    t=3: D ≠ G₂ ✓  (a₁ now at D, a₂ already at G₂)<br>
+    t=4: G₁ ✓<br><br>
+    <span class="hok">No conflicts!</span> This is a <strong>goal node</strong>. Since CBS uses best-first search,
+    this is the optimal solution with cost <strong>7</strong>.`},
+  {show:['root','edges','left-goal','right'],active:null,
+    desc:`<strong>Result: Optimal solution found.</strong><br><br>
+    The right child (cost 7) would also be a goal, but CBS already found the optimal —
+    both children happen to have equal cost here.<br><br>
+    <span class="ha1">a₁</span>: S₁ → A₁ → A₁ → D → G₁  (cost 4, waits 1 step)<br>
+    <span class="ha2">a₂</span>: S₂ → B₁ → D → G₂  (cost 3)<br>
+    <strong>Optimal sum-of-costs = 7</strong><br><br>
+    CBS generated only <strong>3 CT nodes</strong> and ran <strong>3 low-level searches</strong>
+    to find the optimal solution.`}
+];
+
+let ctCur=0;
+function ctRender(){
+  ctSvg.innerHTML='';
+  const s=ctSteps[ctCur];
+  const show=new Set(s.show);
+
+  // Root node
+  if(show.has('root-empty')){
+    drawCTNode(ctSvg,260,20,200,60,{title:'Root',con:'{ }',cost:'?'},
+      s.active==='root'?'active':'');
+  }
+  if(show.has('root')){
+    drawCTNode(ctSvg,220,10,280,100,{
+      title:'Root',con:'{ }',
+      sol:['a₁: S₁→A₁→D→G₁','a₂: S₂→B₁→D→G₂'],
+      cost:6
+    },s.state==='conflict'&&s.active==='root'?'conflict':
+      s.active==='root'?'active':'');
+  }
+
+  // Edges
+  if(show.has('edges')){
+    ctSvg.appendChild(svgEl('line',{x1:300,y1:110,x2:170,y2:170,
+      stroke:'var(--edge)',['stroke-width']:'2'}));
+    ctSvg.appendChild(svgEl('line',{x1:420,y1:110,x2:550,y2:170,
+      stroke:'var(--edge)',['stroke-width']:'2'}));
+    // Constraint labels on edges
+    const t1=svgEl('text',{x:215,y:148,'text-anchor':'middle',fill:'var(--warn)',
+      'font-size':'9','font-weight':'500'});
+    t1.textContent='+(a₁,D,2)';
+    ctSvg.appendChild(t1);
+    const t2=svgEl('text',{x:505,y:148,'text-anchor':'middle',fill:'var(--warn)',
+      'font-size':'9','font-weight':'500'});
+    t2.textContent='+(a₂,D,2)';
+    ctSvg.appendChild(t2);
+  }
+
+  // Left child
+  if(show.has('left-empty')){
+    drawCTNode(ctSvg,40,175,260,60,{title:'Left Child',con:'{(a₁, D, 2)}'},'');
+  }
+  if(show.has('left')){
+    drawCTNode(ctSvg,20,170,300,120,{
+      title:'Left Child',con:'{(a₁, D, 2)}',
+      sol:['a₁: S₁→A₁→A₁→D→G₁','a₂: S₂→B₁→D→G₂'],
+      cost:7
+    },s.active==='left'?'active':'');
+  }
+  if(show.has('left-goal')){
+    drawCTNode(ctSvg,20,170,300,130,{
+      title:'Left Child',con:'{(a₁, D, 2)}',
+      sol:['a₁: S₁→A₁→A₁→D→G₁','a₂: S₂→B₁→D→G₂'],
+      cost:7
+    },'goal');
+  }
+
+  // Right child
+  if(show.has('right-empty')){
+    drawCTNode(ctSvg,420,175,260,60,{title:'Right Child',con:'{(a₂, D, 2)}'},'');
+  }
+  if(show.has('right')){
+    drawCTNode(ctSvg,400,170,300,130,{
+      title:'Right Child',con:'{(a₂, D, 2)}',
+      sol:['a₁: S₁→A₁→D→G₁','a₂: S₂→B₁→B₁→D→G₂'],
+      cost:7
+    },'');
+  }
+
+  document.getElementById('ct-desc').innerHTML=s.desc;
+  document.getElementById('ct-slab').textContent='Step '+(ctCur+1)+' / '+ctSteps.length;
+  document.getElementById('ct-prev').disabled=ctCur===0;
+  document.getElementById('ct-next').disabled=ctCur===ctSteps.length-1;
+}
+function ctGo(d){ctCur=Math.max(0,Math.min(ctSteps.length-1,ctCur+d));ctRender();}
+ctRender();
+
+/* ================================================================
+   SECTION 5: LOW-LEVEL SEARCH
+   ================================================================ */
+const llSvg=document.getElementById('ll-svg');
+// Space-time A* for agent a1 with constraint (a1, D, 2)
+// Nodes: (vertex, time)
+// Graph: S1->A1->D->G1 with wait actions
+const llNodes={
+  'S1,0':{x:60,y:60,label:'S₁,0'},
+  'A1,1':{x:180,y:60,label:'A₁,1'},
+  'D,2': {x:300,y:60,label:'D,2'},
+  'S1,2':{x:60,y:160,label:'S₁,2'},
+  'A1,2':{x:180,y:160,label:'A₁,2'},
+  'D,3': {x:420,y:160,label:'D,3'},
+  'A1,3':{x:180,y:260,label:'A₁,3'},
+  'G1,4':{x:540,y:260,label:'G₁,4'},
+  'D,4': {x:420,y:260,label:'D,4'}
+};
+const llEdges=[
+  ['S1,0','A1,1'],['A1,1','D,2'],['A1,1','S1,2'],['A1,1','A1,2'],
+  ['A1,2','D,3'],['A1,2','A1,3'],['A1,2','S1,2'],
+  ['D,3','G1,4'],['D,3','D,4']
+];
+
+const llStepData=[
+  {explored:[],current:null,constrained:[],path:[],
+    desc:`<strong>A* search for <span class="ha1">a₁</span></strong> with constraint <span class="hwarn">(a₁, D, 2)</span>.<br><br>
+    The search space has states (vertex, time). Each state expands to: move to a neighbor
+    at time t+1, or wait at the current vertex until t+1.<br><br>
+    Start: (S₁, 0). Goal: reach G₁.`},
+  {explored:['S1,0'],current:'S1,0',constrained:['D,2'],path:[],
+    desc:`<strong>Expand (S₁, 0):</strong> f = 0 + h = 0 + 3 = 3<br><br>
+    Neighbors: (A₁, 1). Added to OPEN with g=1, h=2, f=3.`},
+  {explored:['S1,0','A1,1'],current:'A1,1',constrained:['D,2'],path:[],
+    desc:`<strong>Expand (A₁, 1):</strong> f = 1 + 2 = 3<br><br>
+    Neighbors:<br>
+    • (D, 2) — <span class="hconflict">BLOCKED</span> by constraint (a₁, D, 2). Skip!<br>
+    • (A₁, 2) — wait action. g=2, h=2, f=4. Added to OPEN.<br>
+    • (S₁, 2) — backtrack. g=2, h=3, f=5. Added to OPEN.<br><br>
+    The constraint forces a₁ to avoid D at t=2. The agent must wait or detour.`},
+  {explored:['S1,0','A1,1','A1,2'],current:'A1,2',constrained:['D,2'],path:[],
+    desc:`<strong>Expand (A₁, 2):</strong> f = 2 + 2 = 4<br><br>
+    Neighbors:<br>
+    • (D, 3) — no constraint at t=3! g=3, h=1, f=4. Added.<br>
+    • (A₁, 3) — wait again. g=3, h=2, f=5. Added.<br><br>
+    D is now reachable at t=3 — the constraint only blocks t=2.`},
+  {explored:['S1,0','A1,1','A1,2','D,3'],current:'D,3',constrained:['D,2'],path:[],
+    desc:`<strong>Expand (D, 3):</strong> f = 3 + 1 = 4<br><br>
+    Neighbors:<br>
+    • (G₁, 4) — the goal! g=4, h=0, f=4. Added to OPEN.`},
+  {explored:['S1,0','A1,1','A1,2','D,3','G1,4'],current:'G1,4',
+    constrained:['D,2'],path:['S1,0','A1,1','A1,2','D,3','G1,4'],
+    desc:`<strong>Goal reached!</strong> (G₁, 4) popped from OPEN with f=4.<br><br>
+    <span class="hok">Optimal path: S₁ → A₁ → A₁ → D → G₁  (cost 4)</span><br><br>
+    The agent waited one step at A₁ (t=1 to t=2), then moved through D at t=3
+    when the constraint no longer applies. This is exactly the path CBS uses
+    in the left child of the Constraint Tree.`}
+];
+
+let llCur=0;
+function llRender(){
+  llSvg.innerHTML='';
+  const s=llStepData[llCur];
+  const exploredSet=new Set(s.explored);
+  const constrainedSet=new Set(s.constrained);
+  const pathSet=new Set(s.path);
+
+  // Draw edges
+  for(const[a,b]of llEdges){
+    const na=llNodes[a],nb=llNodes[b];
+    if(!na||!nb)continue;
+    let stroke='var(--edge)',sw='1.5',opacity='0.4';
+    if(pathSet.has(a)&&pathSet.has(b)){
+      const ai=s.path.indexOf(a),bi=s.path.indexOf(b);
+      if(Math.abs(ai-bi)===1){stroke='var(--ok)';sw='2.5';opacity='0.8';}
+    }
+    if(constrainedSet.has(a)||constrainedSet.has(b)){
+      if(!pathSet.has(a)||!pathSet.has(b)){opacity='0.2';}
+    }
+    llSvg.appendChild(svgEl('line',{x1:na.x,y1:na.y,x2:nb.x,y2:nb.y,
+      stroke,['stroke-width']:sw,opacity}));
+  }
+
+  // Draw nodes
+  for(const[id,pos]of Object.entries(llNodes)){
+    let fill='var(--node)',strokeC='var(--node-s)',sw='2',opacity='0.35';
+    if(constrainedSet.has(id)){
+      fill='var(--warnf)';strokeC='var(--warn)';sw='2.5';opacity='1';
+    }
+    if(exploredSet.has(id)){
+      fill='var(--a1f)';strokeC='var(--a1)';sw='2';opacity='1';
+    }
+    if(pathSet.has(id)){
+      fill='var(--okf)';strokeC='var(--ok)';sw='2.5';opacity='1';
+    }
+    if(id===s.current&&!pathSet.has(id)){
+      strokeC='var(--a1)';sw='3';opacity='1';
+    }
+
+    llSvg.appendChild(svgEl('circle',{cx:pos.x,cy:pos.y,r:'22',fill,
+      stroke:strokeC,['stroke-width']:sw,opacity}));
+
+    const txt=svgEl('text',{x:pos.x,y:pos.y+3.5,'text-anchor':'middle',
+      fill:constrainedSet.has(id)?'var(--warn)':'var(--fg)',
+      'font-size':'9','font-weight':'500',opacity});
+    txt.textContent=pos.label;
+    llSvg.appendChild(txt);
+
+    if(constrainedSet.has(id)&&exploredSet.size>0){
+      const x=svgEl('text',{x:pos.x,y:pos.y+1,'text-anchor':'middle',
+        fill:'var(--conflict)','font-size':'16','font-weight':'700',opacity:'0.7'});
+      x.textContent='✕';
+      llSvg.appendChild(x);
+    }
+  }
+
+  // Time axis labels
+  for(let t=0;t<=4;t++){
+    const xs={0:60,1:180,2:280,3:420,4:540};
+    if(xs[t]===undefined)continue;
+    const tl=svgEl('text',{x:xs[t],y:310,'text-anchor':'middle',
+      fill:'var(--muted2)','font-size':'10'});
+    tl.textContent='t='+t;
+    llSvg.appendChild(tl);
+  }
+
+  document.getElementById('ll-desc').innerHTML=s.desc;
+  document.getElementById('ll-slab').textContent='Step '+(llCur+1)+' / '+llStepData.length;
+  document.getElementById('ll-prev').disabled=llCur===0;
+  document.getElementById('ll-next').disabled=llCur===llStepData.length-1;
+}
+function llGo(d){llCur=Math.max(0,Math.min(llStepData.length-1,llCur+d));llRender();}
+llRender();
+
+/* ================================================================
+   SECTION 7: CBS vs A* COMPARISON
+   ================================================================ */
+let cmpTab='bottle';
+function setCmpTab(t){
+  cmpTab=t;
+  document.querySelectorAll('.cmp-tab').forEach(e=>e.classList.remove('active'));
+  document.getElementById('cmp-tab-'+t).classList.add('active');
+  document.getElementById('cmp-bottle').hidden=t!=='bottle';
+  document.getElementById('cmp-open').hidden=t!=='open';
+  if(t==='open'&&!openCtReady) initOpenSpace();
+}
+
+/* --- Bottleneck (Fig 1) --- */
+function drawBottleGraph(m){
+  const svg=document.getElementById('bottle-svg');
+  svg.innerHTML='';
+  const W=360,H=310;
+  const cx=W/2;
+
+  // Positions
+  const s1={x:80,y:30},s2={x:280,y:30};
+  const d={x:cx,y:200};
+  const g1={x:80,y:280},g2={x:280,y:280};
+
+  // A nodes (left arm)
+  const aNodes=[];
+  for(let i=0;i<Math.min(m,3);i++){
+    const frac=(i+1)/(Math.min(m,3)+1);
+    aNodes.push({x:s1.x+(d.x-s1.x)*frac*0.6, y:s1.y+(d.y-s1.y)*frac});
+  }
+  // B nodes (right arm)
+  const bNodes=[];
+  for(let i=0;i<Math.min(m,3);i++){
+    const frac=(i+1)/(Math.min(m,3)+1);
+    bNodes.push({x:s2.x+(d.x-s2.x)*frac*0.6, y:s2.y+(d.y-s2.y)*frac});
+  }
+
+  // Draw edges
+  function edge(a,b,color='var(--edge)'){
+    svg.appendChild(svgEl('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:color,'stroke-width':'2'}));
+  }
+  // Left arm
+  if(aNodes.length>0){edge(s1,aNodes[0],'var(--a1s)');}
+  for(let i=0;i<aNodes.length-1;i++) edge(aNodes[i],aNodes[i+1],'var(--a1s)');
+  edge(aNodes.length>0?aNodes[aNodes.length-1]:s1,d,'var(--a1s)');
+  // Right arm
+  if(bNodes.length>0){edge(s2,bNodes[0],'var(--a2s)');}
+  for(let i=0;i<bNodes.length-1;i++) edge(bNodes[i],bNodes[i+1],'var(--a2s)');
+  edge(bNodes.length>0?bNodes[bNodes.length-1]:s2,d,'var(--a2s)');
+  // D to goals
+  edge(d,g1,'var(--a1s)');
+  edge(d,g2,'var(--a2s)');
+
+  // Ellipsis if m>3
+  if(m>3){
+    const etxt1=svgEl('text',{x:(s1.x+d.x)/2-15,y:(s1.y+d.y)/2+15,'text-anchor':'middle',
+      fill:'var(--muted)','font-size':'14','font-weight':'600'});
+    etxt1.textContent='···';
+    svg.appendChild(etxt1);
+    const etxt2=svgEl('text',{x:(s2.x+d.x)/2+15,y:(s2.y+d.y)/2+15,'text-anchor':'middle',
+      fill:'var(--muted)','font-size':'14','font-weight':'600'});
+    etxt2.textContent='···';
+    svg.appendChild(etxt2);
+  }
+
+  // Draw nodes
+  function node(pos,label,fill,stroke,r=16){
+    svg.appendChild(svgEl('circle',{cx:pos.x,cy:pos.y,r,fill,stroke,'stroke-width':'2'}));
+    const t=svgEl('text',{x:pos.x,y:pos.y+4,'text-anchor':'middle',
+      fill:stroke==='var(--a1)'?'var(--a1t)':stroke==='var(--a2)'?'var(--a2t)':'var(--fg)',
+      'font-size':r>16?'12':'10','font-weight':'600'});
+    t.textContent=label;
+    svg.appendChild(t);
+  }
+
+  node(s1,'S₁','var(--a1f)','var(--a1)',18);
+  node(s2,'S₂','var(--a2f)','var(--a2)',18);
+  for(let i=0;i<aNodes.length;i++) node(aNodes[i],'A'+(i+1),'var(--node)','var(--node-s)',14);
+  for(let i=0;i<bNodes.length;i++) node(bNodes[i],'B'+(i+1),'var(--node)','var(--node-s)',14);
+  node(d,'D','var(--node)','var(--node-s)',20);
+  // Conflict ring at D
+  svg.appendChild(svgEl('circle',{cx:d.x,cy:d.y,r:'26',fill:'none',stroke:'var(--conflict)',
+    'stroke-width':'2',opacity:'.5','stroke-dasharray':'4 3'}));
+  node(g1,'G₁','var(--a1f)','var(--a1)',18);
+  node(g2,'G₂','var(--a2f)','var(--a2)',18);
+}
+
+function updateBottle(){
+  const m=parseInt(document.getElementById('m-slider').value);
+  document.getElementById('m-val').textContent=m;
+  drawBottleGraph(m);
+
+  const cbs=2*m+14;
+  const astar=m*m+3;
+  const maxVal=Math.max(cbs,astar,1);
+  document.getElementById('bottle-cbs-val').textContent=cbs;
+  document.getElementById('bottle-astar-val').textContent=astar;
+  document.getElementById('bottle-cbs-bar').style.height=Math.max(5,cbs/maxVal*100)+'%';
+  document.getElementById('bottle-astar-bar').style.height=Math.max(5,astar/maxVal*100)+'%';
+
+  // Color the winner
+  const cbsWins=cbs<=astar;
+  document.getElementById('bottle-cbs-val').className='bar-val '+(cbsWins?'hok':'hconflict');
+  document.getElementById('bottle-astar-val').className='bar-val '+(cbsWins?'hconflict':'hok');
+
+  document.getElementById('bottle-desc').innerHTML=
+    `<strong>m = ${m}:</strong>
+    CBS expands <span class="${cbsWins?'hok':'hconflict'}">${cbs}</span> low-level states
+    (2m + 14 = 2·${m} + 14, linear in m).<br>
+    A* expands <span class="${cbsWins?'hconflict':'hok'}">${astar}</span> joint states
+    (m² + 3 = ${m}² + 3, quadratic in m).<br><br>
+    ${cbsWins?
+      `<span class="hok">CBS wins</span> — there is only <strong>one conflict</strong> at D regardless of m.
+      CBS resolves it with 3 CT nodes and 2 single-agent replans. A* must enumerate all m² pairs
+      of intermediate nodes (A<sub>i</sub>, B<sub>j</sub>) at the root.`
+      :
+      `<span class="hconflict">A* wins</span> at m=${m}. With very few intermediate nodes,
+      the Cartesian product is small. As m grows, CBS's linear scaling overtakes A*'s quadratic.`
+    }`;
+}
+updateBottle();
+
+/* --- Open space (Fig 6) --- */
+let openCtReady=false;
+function initOpenSpace(){
+  openCtReady=true;
+  drawOpenGrid();
+  buildOpenCT();
+  openCtRender();
+}
+
+function drawOpenGrid(){
+  const svg=document.getElementById('open-svg');
+  svg.innerHTML='';
+  const S=52,P=18;
+  const rows=['D','C','B','A'];
+  const cols=[1,2,3,4];
+  // Walls (black): (1,D),(3,D),(4,D),(4,A),(1,A)
+  const walls=new Set(['0,3','2,3','3,3','3,0','0,0']);
+  // Open/grey: (2,C),(3,C),(2,B),(3,B) → internal coords (1,2),(2,2),(1,1),(2,1)
+  const grey=new Set(['1,2','2,2','1,1','2,1']);
+
+  // Grid cells
+  for(let r=0;r<4;r++){
+    for(let c=0;c<4;c++){
+      const key=c+','+(3-r);
+      const x=P+c*S,y=P+r*S;
+      let fill='var(--surface)',stroke='var(--border)';
+      if(walls.has(key)){fill='var(--fg)';stroke='var(--fg)';}
+      else if(grey.has(key)){fill='var(--a1f)';stroke='var(--border)';}
+      svg.appendChild(svgEl('rect',{x,y,width:S-2,height:S-2,rx:'4',fill,stroke,'stroke-width':'1',
+        class:'grid-cell',opacity:walls.has(key)?'.2':'1'}));
+    }
+  }
+
+  // Row/col labels
+  for(let r=0;r<4;r++){
+    const t=svgEl('text',{x:8,y:P+r*S+S/2+1,'text-anchor':'middle',
+      fill:'var(--muted)','font-size':'11','font-weight':'600'});
+    t.textContent=rows[r];
+    svg.appendChild(t);
+  }
+  for(let c=0;c<4;c++){
+    const t=svgEl('text',{x:P+c*S+S/2-1,y:P+4*S+14,'text-anchor':'middle',
+      fill:'var(--muted)','font-size':'11','font-weight':'600'});
+    t.textContent=cols[c];
+    svg.appendChild(t);
+  }
+
+  // Agent 1: (2,D)→(3,A) — col=1,row=3 → col=2,row=0
+  function cellCenter(col,row){return{x:P+col*S+S/2-1,y:P+(3-row)*S+S/2-1};}
+
+  const a1s=cellCenter(1,3), a1g=cellCenter(2,0);
+  svg.appendChild(svgEl('circle',{cx:a1s.x,cy:a1s.y,r:'12',fill:'var(--a1)',opacity:'.85'}));
+  svg.appendChild(svgEl('text',{x:a1s.x,y:a1s.y+4,'text-anchor':'middle',
+    fill:'#fff','font-size':'9','font-weight':'700'})).textContent='1';
+  svg.appendChild(svgEl('circle',{cx:a1g.x,cy:a1g.y,r:'12',fill:'var(--a1)',opacity:'.35','stroke-dasharray':'3 2',
+    stroke:'var(--a1)','stroke-width':'2'}));
+  svg.appendChild(svgEl('text',{x:a1g.x,y:a1g.y+4,'text-anchor':'middle',
+    fill:'var(--a1t)','font-size':'9','font-weight':'700'})).textContent='G₁';
+
+  // Agent 2: (1,C)→(4,B) — col=0,row=2 → col=3,row=1
+  const a2s=cellCenter(0,2), a2g=cellCenter(3,1);
+  svg.appendChild(svgEl('circle',{cx:a2s.x,cy:a2s.y,r:'12',fill:'var(--a2)',opacity:'.85'}));
+  svg.appendChild(svgEl('text',{x:a2s.x,y:a2s.y+4,'text-anchor':'middle',
+    fill:'#fff','font-size':'9','font-weight':'700'})).textContent='2';
+  svg.appendChild(svgEl('circle',{cx:a2g.x,cy:a2g.y,r:'12',fill:'var(--a2)',opacity:'.35','stroke-dasharray':'3 2',
+    stroke:'var(--a2)','stroke-width':'2'}));
+  svg.appendChild(svgEl('text',{x:a2g.x,y:a2g.y+4,'text-anchor':'middle',
+    fill:'var(--a2t)','font-size':'9','font-weight':'700'})).textContent='G₂';
+
+  // Show conflict zone label
+  const cz=cellCenter(1.5,1.5);
+  svg.appendChild(svgEl('text',{x:cz.x,y:cz.y+3,'text-anchor':'middle',
+    fill:'var(--conflict)','font-size':'9','font-weight':'600',opacity:'.7'})).textContent='conflict zone';
+
+  // Static description
+  document.getElementById('open-desc').innerHTML=
+    `<strong>Open space = many conflicts.</strong> Each agent has <strong>4 optimal paths</strong> of length 4.
+    All 16 combinations (4 × 4) produce a conflict inside the grey area.<br><br>
+    A* in the joint state space expands only <span class="hok">8 states</span> — the 2-agent space
+    is small (4×4 grid) and A* navigates it directly.<br><br>
+    CBS generates <strong>11 CT nodes</strong> (5 non-goal at cost 8, 6 goal at cost 9),
+    each running a low-level search. Total: <span class="hconflict">54 low-level expansions</span> —
+    nearly 7× more work than A*. The open area means conflicts are everywhere,
+    and the CT branches explosively.`;
+}
+
+/* Open space CT step-through — mini-grid */
+function drawMiniGrid(parent,gx,gy,pathA1,pathA2,conflictCell){
+  const cs=17;
+  const walls=new Set(['0,3','2,3','3,3','3,0','0,0']);
+  function cc(col,row){return{x:gx+col*cs+cs/2,y:gy+(3-row)*cs+cs/2};}
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    const key=c+','+(3-r);const isW=walls.has(key);
+    parent.appendChild(svgEl('rect',{x:gx+c*cs+1,y:gy+r*cs+1,width:cs-2,height:cs-2,rx:'2',
+      fill:isW?'var(--fg)':'var(--surface)',opacity:isW?'.12':'.5',
+      stroke:'var(--border)','stroke-width':'.5'}));
+  }
+  function drawP(path,color,dx){
+    if(!path||path.length<2)return;
+    const pts=path.map(p=>{const c=cc(p[0],p[1]);return{x:c.x+dx,y:c.y};});
+    parent.appendChild(svgEl('path',{
+      d:pts.map((p,i)=>(i?'L':'M')+p.x+','+p.y).join(' '),
+      fill:'none',stroke:color,'stroke-width':'2.5',
+      'stroke-linecap':'round','stroke-linejoin':'round',opacity:'.75'}));
+    parent.appendChild(svgEl('circle',{cx:pts[0].x,cy:pts[0].y,r:'3.5',fill:color,opacity:'.9'}));
+    parent.appendChild(svgEl('circle',{cx:pts[pts.length-1].x,cy:pts[pts.length-1].y,r:'3.5',
+      fill:'none',stroke:color,'stroke-width':'1.5',opacity:'.7','stroke-dasharray':'2 1'}));
+  }
+  drawP(pathA1,'var(--a1)',-1.5);
+  drawP(pathA2,'var(--a2)',1.5);
+  if(conflictCell){
+    const cp=cc(conflictCell[0],conflictCell[1]);
+    parent.appendChild(svgEl('circle',{cx:cp.x,cy:cp.y,r:'7',fill:'none',
+      stroke:'var(--conflict)','stroke-width':'2',opacity:'.8'}));
+  }
+}
+function drawOpenCTNode(svg,x,y,w,h,data,state){
+  const g=svgEl('g',{});
+  let fill='var(--ct-bg)',stroke='var(--ct-border)',sw='2';
+  if(state==='active'){stroke='var(--a1)';sw='2.5';}
+  if(state==='goal'){fill='var(--okf)';stroke='var(--ok)';sw='2.5';}
+  if(state==='conflict'){stroke='var(--conflict)';sw='2.5';}
+  g.appendChild(svgEl('rect',{x,y,width:w,height:h,rx:'8',fill,stroke,'stroke-width':sw}));
+  let ty=y+16;
+  function addLn(text,color,size,weight){
+    const t=svgEl('text',{x:x+w/2,y:ty,'text-anchor':'middle',
+      fill:color||'var(--fg)','font-size':size||'10','font-weight':weight||'500'});
+    t.textContent=text;g.appendChild(t);ty+=14;
+  }
+  if(data.title){addLn(data.title,'var(--muted)','9','600');ty+=2;}
+  if(data.con!==undefined){addLn('Con: '+data.con,'var(--warn)','9','500');}
+  if(data.pathA1&&data.pathA2){
+    ty+=4;const gw=17*4;
+    drawMiniGrid(g,x+(w-gw)/2,ty,data.pathA1,data.pathA2,data.conflict);
+    ty+=gw+6;
+  }
+  if(data.cost!==undefined){
+    addLn('Cost: '+data.cost,state==='goal'?'var(--ok)':'var(--a1)','10','600');
+  }
+  if(state==='goal'){ty+=2;addLn('✓ GOAL','var(--ok)','11','700');}
+  svg.appendChild(g);
+}
+
+const openCtSteps=[
+  {nodes:[{id:'R',x:250,y:15,w:220,h:150,state:'active',data:{
+    title:'Root',con:'{ }',cost:8,
+    pathA1:[[1,3],[1,2],[1,1],[2,1],[2,0]],
+    pathA2:[[0,2],[1,2],[1,1],[2,1],[3,1]],
+    conflict:[1,2]}}],
+  edges:[],
+  desc:`<strong>Root:</strong> Cost 8. Both agents’ shortest paths cross through the open area.<br>
+    <span class="ha1">a₁</span>: (2,D)→(2,C)→(2,B)→(3,B)→(3,A)<br>
+    <span class="ha2">a₂</span>: (1,C)→(2,C)→(2,B)→(3,B)→(4,B)<br><br>
+    Validate → conflict at <span class="hconflict">(2,C) at t=1</span>: both agents enter cell (2,C).`},
+
+  {nodes:[
+    {id:'R',x:280,y:10,w:180,h:55,state:'conflict',data:{title:'Root',con:'{ }',cost:8}},
+    {id:'L1',x:20,y:115,w:220,h:165,state:'goal',data:{
+      title:'Left',con:'{(a₁, 2C, 1)}',cost:9,
+      pathA1:[[1,3],[1,2],[1,1],[2,1],[2,0]],
+      pathA2:[[0,2],[1,2],[1,1],[2,1],[3,1]],
+      conflict:null}},
+    {id:'R1',x:490,y:115,w:220,h:150,state:'active',data:{
+      title:'Right',con:'{(a₂, 2C, 1)}',cost:8,
+      pathA1:[[1,3],[1,2],[1,1],[2,1],[2,0]],
+      pathA2:[[0,2],[0,1],[1,1],[2,1],[3,1]],
+      conflict:[1,1]}}
+  ],edges:[['R','L1'],['R','R1']],
+  desc:`<strong>Split on (2,C) at t=1.</strong><br><br>
+    <strong>Left:</strong> a₁ can’t be at (2,C) at t=1. Its only exit from (2,D) is (2,C),
+    so a₁ must <em>wait</em> one step → cost 5. Total cost 9.
+    <span class="hok">No conflicts → GOAL.</span><br><br>
+    <strong>Right:</strong> a₂ reroutes via (1,B). Both agents still cross through (2,B) →
+    new conflict at <span class="hconflict">(2,B) at t=2</span>. Cost stays 8.`},
+
+  {nodes:[
+    {id:'R',x:310,y:10,w:140,h:50,state:'',data:{title:'Root',cost:8}},
+    {id:'L1',x:60,y:95,w:130,h:60,state:'goal',data:{title:'L',con:'(a₁,2C,1)',cost:9}},
+    {id:'R1',x:470,y:95,w:140,h:50,state:'conflict',data:{title:'R',con:'(a₂,2C,1)',cost:8}},
+    {id:'R2',x:370,y:200,w:110,h:50,state:'goal',data:{title:'RL',cost:9}},
+    {id:'R3',x:540,y:200,w:110,h:50,state:'',data:{title:'RR',cost:8}},
+    {id:'R4',x:460,y:285,w:90,h:40,state:'goal',data:{title:'…',cost:9}},
+    {id:'R5',x:590,y:285,w:90,h:40,state:'goal',data:{title:'…',cost:9}}
+  ],edges:[['R','L1'],['R','R1'],['R1','R2'],['R1','R3'],['R3','R4'],['R3','R5']],
+  desc:`<strong>CT explodes.</strong> Every cost-8 node has conflicts — the agents
+    keep colliding in different cells. Each split either produces a cost-9 goal
+    (one agent detours or waits) or another cost-8 node with a new conflict.<br><br>
+    The full CT has <strong>5 non-goal</strong> + <strong>6 goal</strong> = 11 nodes.
+    Total low-level work: <span class="hconflict">54 expansions</span>.<br><br>
+    <em>A* solved this in just 8 joint-state expansions.</em>
+    Open spaces cause CBS’s CT to branch at every level — exactly the scenario
+    MA-CBS was designed to handle.`}
+];
+
+let openCtCur=0;
+function openCtRender(){
+  const svg=document.getElementById('open-ct-svg');
+  svg.innerHTML='';
+  const s=openCtSteps[openCtCur];
+  for(const[from,to]of s.edges){
+    const fn=s.nodes.find(n=>n.id===from);
+    const tn=s.nodes.find(n=>n.id===to);
+    if(fn&&tn){
+      svg.appendChild(svgEl('line',{
+        x1:fn.x+fn.w/2,y1:fn.y+fn.h,
+        x2:tn.x+tn.w/2,y2:tn.y,
+        stroke:'var(--edge)','stroke-width':'2'}));
+    }
+  }
+  for(const n of s.nodes){
+    drawOpenCTNode(svg,n.x,n.y,n.w,n.h,n.data,n.state);
+  }
+  document.getElementById('oc-slab').textContent='Step '+(openCtCur+1)+' / '+openCtSteps.length;
+  document.getElementById('oc-prev').disabled=openCtCur===0;
+  document.getElementById('oc-next').disabled=openCtCur===openCtSteps.length-1;
+  document.getElementById('oc-desc').innerHTML=s.desc;
+}
+function openCtGo(d){openCtCur=Math.max(0,Math.min(openCtSteps.length-1,openCtCur+d));openCtRender();}
+
+
+/* ================================================================
+   SECTION 6: MDD CONSTRUCTION (lazy-initialized on details open)
+   ================================================================ */
+let mddReady=false;
+let mddPhase='fwd';
+
+function mddSetPhase(p){
+  mddPhase=p;
+  document.querySelectorAll('.mdd-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('mdd-tab-'+p).classList.add('active');
+  document.getElementById('mdd-phase-fwd').hidden=p!=='fwd';
+  document.getElementById('mdd-phase-bwd').hidden=p!=='bwd';
+  document.getElementById('mdd-phase-dag').hidden=p!=='dag';
+}
+
+// Forward/backward variables — initialized lazily
+let mddFwdLevels,mddFwdSteps,mddFwdCur=0;
+let mddDagSteps,mddDagCur=0;
+let mddFwdNodes={},mddFwdEdges=[];
+let mddDagNodePos={},mddDagNodeIds=[],mddDagEdgeList=[];
+
+function mddInit(){
+  if(mddReady)return;
+  mddReady=true;
+
+  const GRID=4,PAD=20;
+  const wall={x:1,y:1};
+  const constraints=[{x:3,y:2,t:5}];
+  const goalC={x:3,y:3};
+  const startC={x:0,y:0};
+  const dirs=[[0,1],[0,-1],[1,0],[-1,0],[0,0]];
+
+  // Heuristic
+  function computeH(){
+    const h=Array.from({length:GRID},()=>Array(GRID).fill(999));
+    h[goalC.x][goalC.y]=0;
+    const q=[goalC];
+    const mv=[[0,1],[0,-1],[1,0],[-1,0]];
+    while(q.length){
+      const c=q.shift();
+      for(const[dx,dy]of mv){
+        const nx=c.x+dx,ny=c.y+dy;
+        if(nx<0||ny<0||nx>=GRID||ny>=GRID)continue;
+        if(nx===wall.x&&ny===wall.y)continue;
+        if(h[nx][ny]<=h[c.x][c.y]+1)continue;
+        h[nx][ny]=h[c.x][c.y]+1;
+        q.push({x:nx,y:ny});
+      }
+    }
+    return h;
+  }
+  const heur=computeH();
+  const optCost=6;
+
+  // Forward pass simulation
+  function simForward(){
+    const levels=[new Set()];
+    levels[0].add(startC.x+','+startC.y);
+    for(let t=0;t<optCost;t++){
+      const next=new Set();
+      for(const k of levels[t]){
+        const[lx,ly]=k.split(',').map(Number);
+        for(const[dx,dy]of dirs){
+          const nx=lx+dx,ny=ly+dy;
+          if(nx<0||ny<0||nx>=GRID||ny>=GRID)continue;
+          if(nx===wall.x&&ny===wall.y)continue;
+          if(heur[nx][ny]===999)continue;
+          if((t+1)+heur[nx][ny]>optCost)continue;
+          if(constraints.some(c=>nx===c.x&&ny===c.y&&(t+1)===c.t))continue;
+          next.add(nx+','+ny);
+        }
+      }
+      levels.push(next);
+    }
+    const last=new Set();
+    if(levels[optCost].has(goalC.x+','+goalC.y))last.add(goalC.x+','+goalC.y);
+    levels[optCost]=last;
+    return levels;
+  }
+  mddFwdLevels=simForward();
+
+  // Forward pass steps
+  mddFwdSteps=[];
+  mddFwdSteps.push({t:-1,
+    html:`<strong>levels_</strong> stores a vector of vectors — one per timestep from 0 to <code>optimal_cost</code>.<br><br>
+    <code>levels_[0] = {start}</code> — only the start cell at t=0.<br>
+    The forward pass will expand outward, adding cells reachable at each successive timestep.`});
+  for(let t=0;t<=optCost;t++){
+    const cells=[...mddFwdLevels[t]].map(k=>{const[x,y]=k.split(',').map(Number);return{x,y};});
+    const cellStr=cells.map(c=>'('+c.x+','+c.y+')').join(', ');
+    let html;
+    if(t===0){html=`<strong>t = 0:</strong> {${cellStr}}<br><br>Just the start cell.`;}
+    else if(t===optCost){
+      html=`<strong>t = ${t}:</strong> {${cellStr}}<br><br>
+      <strong>Goal filter applied.</strong> Only Goal (3,3) survives at the last level —
+      any other cell here can't be the endpoint of an optimal path.`;
+    } else {
+      let note='';
+      if(t===5) note='<br><br><span class="hc">Constraint:</span> (3,2) is blocked at t=5 — another agent occupies it.';
+      html=`<strong>t = ${t}:</strong> ${cells.length} cells<br>
+      {${cellStr}}<br><br>
+      For each cell in levels_[${t-1}], expand neighbors + wait.
+      Keep only cells where <code>t + h(cell) ≤ ${optCost}</code> and not blocked by constraints.${note}`;
+    }
+    mddFwdSteps.push({t,html});
+  }
+
+  // Build forward SVG
+  const fsvg=document.getElementById('mdd-fwd-graph');
+  const LX=[];
+  for(let t=0;t<=optCost;t++) LX.push(PAD+30+t*((760-2*PAD-60)/optCost));
+
+  for(let t=0;t<=optCost;t++){
+    const txt=svgEl('text',{x:LX[t],y:18,class:'tlbl','text-anchor':'middle'});
+    txt.textContent='t='+t;
+    fsvg.appendChild(txt);
+  }
+
+  mddFwdNodes={};
+  for(let t=0;t<=optCost;t++){
+    const cells=[...mddFwdLevels[t]].map(k=>{const[x,y]=k.split(',').map(Number);return{x,y,k};});
+    cells.sort((a,b)=>a.y-b.y||a.x-b.x);
+    const n=cells.length;
+    cells.forEach((c,i)=>{
+      const cy=n===1?40+300/2:40+i/(n-1)*300;
+      const cx=LX[t];
+      fsvg.appendChild(svgEl('circle',{
+        id:'mfn-'+t+'-'+c.k,class:'fwd-node',cx,cy,r:18,opacity:0}));
+      const isGoal=c.x===goalC.x&&c.y===goalC.y;
+      const isStart=c.x===startC.x&&c.y===startC.y;
+      let label='('+c.x+','+c.y+')';
+      if(isGoal&&t===optCost)label='★';else if(isStart&&t===0)label='S';
+      const tx=svgEl('text',{
+        id:'mft-'+t+'-'+c.k,class:'fwd-label',x:cx,y:cy+4,
+        'text-anchor':'middle','font-size':label.length>3?'9':'11','font-weight':'500',opacity:0});
+      tx.textContent=label;
+      fsvg.appendChild(tx);
+      mddFwdNodes[t+'-'+c.k]={cx,cy};
+    });
+  }
+
+  mddFwdEdges=[];
+  for(let t=0;t<optCost;t++){
+    for(const pk of mddFwdLevels[t]){
+      const[px,py]=pk.split(',').map(Number);
+      for(const[dx,dy]of dirs){
+        const nx=px+dx,ny=py+dy,nk=nx+','+ny;
+        if(mddFwdLevels[t+1].has(nk)){
+          const from=mddFwdNodes[t+'-'+pk],to=mddFwdNodes[(t+1)+'-'+nk];
+          if(from&&to){
+            fsvg.insertBefore(svgEl('line',{
+              id:'mfe-'+t+'-'+pk+'-'+nk,class:'fwd-edge',
+              x1:from.cx,y1:from.cy,x2:to.cx,y2:to.cy,opacity:0}),fsvg.firstChild);
+            mddFwdEdges.push({t,from:pk,to:nk});
+          }
+        }
+      }
+    }
+  }
+  mddFwdRender();
+
+  // Backward pass
+  const dsvg=document.getElementById('mdd-dag-graph');
+  const dagLX=[52,160,268,376,484,592,692];
+  const dagTH=300,dagTP=55;
+  function fmt(k){return'('+k+')';}
+
+  mddDagNodePos={};mddDagNodeIds=[];
+  for(let t=0;t<=optCost;t++){
+    const cells=[...mddFwdLevels[t]].map(k=>{const[x,y]=k.split(',').map(Number);return{x,y,k};});
+    cells.sort((a,b)=>a.y-b.y||a.x-b.x);
+    const n=cells.length;
+    cells.forEach((c,i)=>{
+      const cy=n===1?dagTP+dagTH/2:dagTP+i/(n-1)*dagTH;
+      const id=t+'-'+c.k;
+      mddDagNodePos[id]={cx:dagLX[t],cy,t,k:c.k};
+      mddDagNodeIds.push(id);
+    });
+  }
+
+  mddDagEdgeList=[];
+  for(let t=0;t<optCost;t++){
+    for(const pk of mddFwdLevels[t]){
+      const[px,py]=pk.split(',').map(Number);
+      for(const[dx,dy]of dirs){
+        const nx=px+dx,ny=py+dy,nk=nx+','+ny;
+        if(mddFwdLevels[t+1].has(nk)){
+          const eid=t+'-'+pk+'>'+(t+1)+'-'+nk;
+          if(!mddDagEdgeList.some(e=>e.id===eid))
+            mddDagEdgeList.push({id:eid,from:t+'-'+pk,to:(t+1)+'-'+nk});
+        }
+      }
+    }
+  }
+
+  // Simulate backward pruning
+  const bwdL=mddFwdLevels.map(s=>new Set(s));
+  const bwdRecord=[];
+  for(let t=optCost-1;t>=0;t--){
+    const surv=bwdL[t+1];
+    const prunedHere=[];
+    const kept=new Set();
+    for(const k of bwdL[t]){
+      const[lx,ly]=k.split(',').map(Number);
+      let ok=false;
+      for(const[dx,dy]of dirs){
+        const nx=lx+dx,ny=ly+dy;
+        if(nx<0||ny<0||nx>=GRID||ny>=GRID)continue;
+        if(nx===wall.x&&ny===wall.y)continue;
+        if(surv.has(nx+','+ny)){ok=true;break;}
+      }
+      if(ok)kept.add(k);else prunedHere.push(k);
+    }
+    bwdL[t]=kept;
+    bwdRecord.push({t,pruned:prunedHere,survKeys:[...surv]});
+  }
+
+  const allPruned=new Set();
+  mddDagSteps=[];
+  const totalNodes=mddDagNodeIds.length;
+
+  mddDagSteps.push({pruned:new Set(),surv:new Set(),cl:-1,
+    html:`<strong>After forward pass + goal filter.</strong>
+    ${totalNodes} nodes across ${optCost+1} levels (t=0 to t=${optCost}).
+    The backward pass checks from <strong>t=${optCost-1}</strong> down to t=0,
+    matching the code: <code>for(int t = optimal_cost-1; t >= 0; --t)</code>.`});
+
+  for(const rec of bwdRecord){
+    const survIds=rec.survKeys.map(k=>(rec.t+1)+'-'+k);
+    const prunedIds=rec.pruned.map(k=>rec.t+'-'+k);
+    for(const p of prunedIds)allPruned.add(p);
+    const survStr=rec.survKeys.map(k=>rec.t+1===optCost?'★':fmt(k)).join(', ');
+    const levelKeys=[...mddFwdLevels[rec.t]].sort();
+    let html=`<strong>t = ${rec.t}:</strong> Check against surviving t=${rec.t+1} = <span class="hs">{${survStr}}</span>.<br><br>`;
+    for(const k of levelKeys){
+      const id=rec.t+'-'+k;
+      if(prunedIds.includes(id)) html+=`<strong>${fmt(k)}</strong> → no surviving successor <span class="hp">✗ pruned</span><br>`;
+      else html+=`<strong>${fmt(k)}</strong> <span class="hs">✓</span><br>`;
+    }
+    if(rec.pruned.length>0&&allPruned.size>rec.pruned.length)
+      html+=`<br><em>Cascade:</em> prior pruning created new dead ends.`;
+    else if(rec.pruned.length===0)
+      html+=`<br>No pruning at this level.`;
+    if(rec.pruned.length>0||rec.t===optCost-1)
+      mddDagSteps.push({pruned:new Set(allPruned),surv:new Set(survIds),cl:rec.t,html});
+  }
+
+  const prunedList=[...allPruned].map(id=>{
+    const t=id.split('-')[0];
+    const k=id.substring(id.indexOf('-')+1);
+    return fmt(k)+'@t='+t;
+  }).join(', ');
+  mddDagSteps.push({pruned:new Set(allPruned),surv:new Set(),cl:-1,final:true,
+    html:`<strong>Final MDD:</strong> ${allPruned.size} of ${totalNodes} nodes pruned.
+    Every surviving node lies on at least one optimal-cost path from (0,0) to (3,3).<br><br>
+    ${allPruned.size>0?'Pruned: <span class="hp">'+prunedList+'</span>. The constraint at (3,2)@t=5 caused (3,1)@t=4 to lose its only successor, which cascaded to (3,0)@t=3.':'No nodes were pruned.'}`});
+
+  // Build DAG SVG
+  for(let l=0;l<=optCost;l++){
+    dsvg.appendChild(svgEl('rect',{
+      id:'mdlbg'+l,class:'lbg',x:dagLX[l]-42,y:28,width:84,height:378,rx:6,opacity:0}));
+  }
+  for(let l=0;l<=optCost;l++){
+    const t=svgEl('text',{x:dagLX[l],y:18,class:'tlbl','text-anchor':'middle'});
+    t.textContent='t='+l;
+    dsvg.appendChild(t);
+  }
+  for(const e of mddDagEdgeList){
+    const f=mddDagNodePos[e.from],t=mddDagNodePos[e.to];
+    dsvg.appendChild(svgEl('line',{
+      id:'mde-'+e.id,class:'el s-a',x1:f.cx,y1:f.cy,x2:t.cx,y2:t.cy}));
+  }
+  for(const id of mddDagNodeIds){
+    const p=mddDagNodePos[id];
+    const isGoal=id===optCost+'-'+goalC.x+','+goalC.y;
+    const isStart=id==='0-'+startC.x+','+startC.y;
+    const r=isGoal?22:18;
+    dsvg.appendChild(svgEl('circle',{id:'mdn-'+id,class:'nc s-a',cx:p.cx,cy:p.cy,r}));
+    let label=isGoal?'★':isStart?'S':fmt(p.k);
+    const tx=svgEl('text',{
+      id:'mdl-'+id,class:'nl s-a',x:p.cx,y:p.cy+(isGoal?5:4),
+      'text-anchor':'middle','font-size':label.length>3?'9':'12','font-weight':'500'});
+    tx.textContent=label;
+    dsvg.appendChild(tx);
+  }
+  mddDagRender();
+}
+
+function mddFwdRender(){
+  if(!mddReady)return;
+  const s=mddFwdSteps[mddFwdCur];
+  const showUpTo=s.t;
+  for(let t=0;t<=6;t++){
+    if(!mddFwdLevels[t])continue;
+    for(const k of mddFwdLevels[t]){
+      const c=document.getElementById('mfn-'+t+'-'+k);
+      const tx=document.getElementById('mft-'+t+'-'+k);
+      if(c){const show=t<=showUpTo;c.setAttribute('opacity',show?'1':'0');tx.setAttribute('opacity',show?'1':'0');}
+    }
+  }
+  for(const e of mddFwdEdges){
+    const line=document.getElementById('mfe-'+e.t+'-'+e.from+'-'+e.to);
+    if(line) line.setAttribute('opacity',e.t<showUpTo?'.35':'0');
+  }
+  document.getElementById('mdd-fsl').textContent='Step '+(mddFwdCur+1)+' / '+mddFwdSteps.length;
+  document.getElementById('mdd-fp').disabled=mddFwdCur===0;
+  document.getElementById('mdd-fn').disabled=mddFwdCur===mddFwdSteps.length-1;
+  document.getElementById('mdd-fdesc').innerHTML=s.html;
+}
+function mddFwdGo(d){mddFwdCur=Math.max(0,Math.min(mddFwdSteps.length-1,mddFwdCur+d));mddFwdRender();}
+
+function mddDagRender(){
+  if(!mddReady)return;
+  const s=mddDagSteps[mddDagCur];
+  const pruned=s.pruned,surv=s.surv;
+  for(const id of mddDagNodeIds){
+    const c=document.getElementById('mdn-'+id);
+    const t=document.getElementById('mdl-'+id);
+    let st;
+    if(pruned.has(id))st='s-p';
+    else if(surv.has(id)||(s.final&&!pruned.has(id)))st='s-s';
+    else st='s-a';
+    c.setAttribute('class','nc '+st);
+    t.setAttribute('class','nl '+st);
+  }
+  for(const e of mddDagEdgeList){
+    const line=document.getElementById('mde-'+e.id);
+    let st;
+    if(pruned.has(e.from)||pruned.has(e.to))st='s-p';
+    else if(s.final)st='s-s';
+    else st='s-a';
+    line.setAttribute('class','el '+st);
+  }
+  for(let l=0;l<=6;l++){
+    const bg=document.getElementById('mdlbg'+l);
+    if(bg) bg.style.opacity=l===s.cl?'1':'0';
+  }
+  document.getElementById('mdd-dsl').textContent='Step '+(mddDagCur+1)+' / '+mddDagSteps.length;
+  document.getElementById('mdd-bp').disabled=mddDagCur===0;
+  document.getElementById('mdd-bn').disabled=mddDagCur===mddDagSteps.length-1;
+  document.getElementById('mdd-ddesc').innerHTML=s.html;
+}
+function mddDagGo(d){mddDagCur=Math.max(0,Math.min(mddDagSteps.length-1,mddDagCur+d));mddDagRender();}
+
+// Initialize MDD on first open
+document.getElementById('mdd-details').addEventListener('toggle',function(){
+  if(this.open) mddInit();
+});
+
+/* ================================================================
+   KEYBOARD NAVIGATION
+   ================================================================ */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
+  const d=e.key==='ArrowRight'?1:-1;
+  const sections=[
+    {el:'conflict-svg',go:()=>conflictGo(d)},
+    {el:'ct-svg',go:()=>ctGo(d)},
+    {el:'ll-svg',go:()=>llGo(d)},
+  ];
+  if(openCtReady){
+    sections.push({el:'open-ct-svg',go:()=>openCtGo(d)});
+  }
+  if(mddReady){
+    if(mddPhase==='fwd') sections.push({el:'mdd-fwd-graph',go:()=>mddFwdGo(d)});
+    if(mddPhase==='dag') sections.push({el:'mdd-dag-graph',go:()=>mddDagGo(d)});
+  }
+  for(const s of sections){
+    const el=document.getElementById(s.el);
+    if(!el)continue;
+    const r=el.getBoundingClientRect();
+    if(r.top<window.innerHeight&&r.bottom>0){s.go();e.preventDefault();return;}
+  }
+});
+</script>
+
+</body>
+</html>
