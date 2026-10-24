@@ -1,0 +1,74 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deployments at once, and never cancel one halfway: both
+# branches publish into the same site, so a cancelled run could leave a
+# half-built site live.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: src-main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build production site from main
+        working-directory: src-main
+        run: python3 build.py --out "$GITHUB_WORKSPACE/_site"
+
+      - name: Check whether a staging branch exists
+        id: staging
+        run: |
+          if git -C src-main ls-remote --exit-code --heads origin staging >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No staging branch yet, skipping the preview build."
+          fi
+
+      - name: Check out staging
+        if: steps.staging.outputs.exists == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          path: src-staging
+
+      - name: Build preview from staging
+        if: steps.staging.outputs.exists == 'true'
+        working-directory: src-staging
+        run: python3 build.py --out "$GITHUB_WORKSPACE/_site/preview" --staging
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
