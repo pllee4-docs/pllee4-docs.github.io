@@ -13,10 +13,18 @@
 <body>
 
 <style>
-/* Layout: vertical sections with interactive card demos */
+/* Page-specific styles only. Shared look (tokens, type, TLDR, cards, steppers)
+   comes from assets/explainer.css, injected by build.py. */
+
+/* Map this page's legacy token names onto the shared tokens */
+:root{
+  --surface:var(--s); --border:var(--bd); --muted:var(--dim); --code:var(--s2);
+  --btn:var(--blue); --btn-f:var(--bg); --btn-d:var(--bd);
+}
+
+/* Agent / state palette used by the demos */
 :root {
-  --bg: #f4f4f9; --fg: #1a1a2e; --surface: #fff; --border: #d8dbe6;
-  --muted: #64648a; --muted2: #9898ae;
+  --muted2: #9898ae;
   --a1: #3d6fa0; --a1f: #d0e2f2; --a1t: #1e3a5c; --a1s: #5a96cc;
   --a2: #b83a2d; --a2f: #f8ddd9; --a2t: #6e1f16; --a2s: #d95a4a;
   --ok: #1f8050; --okf: #cdf0dc; --okt: #145538;
@@ -24,13 +32,10 @@
   --conflict: #d03030;
   --node: #e6e8f0; --node-s: #b8bccf;
   --edge: #a8aec2;
-  --btn: #3d6fa0; --btn-f: #fff; --btn-d: #c0c4d4;
-  --code: #ecedf4;
   --ct-bg: #f8f8fc; --ct-border: #c8cce0;
 }
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0c0c1a; --fg:#d8d8ec; --surface:#141428; --border:#252540;
-  --muted:#8080a0; --muted2:#55556e;
+  --muted2:#55556e;
   --a1:#6aaae0; --a1f:#162a42; --a1t:#aacce8; --a1s:#4888c0;
   --a2:#e86050; --a2f:#3a1818; --a2t:#f0a898; --a2s:#c04838;
   --ok:#38c878; --okf:#142e20; --okt:#78e8a8;
@@ -38,14 +43,10 @@
   --conflict:#ff5858;
   --node:#1e1e38; --node-s:#3a3a58;
   --edge:#3c4060;
-  --btn:#6aaae0; --btn-f:#0c0c1a; --btn-d:#252540;
-  --code:#121228;
   --ct-bg:#161630; --ct-border:#2a2a48;
-  color-scheme:dark
 }}
 :root[data-theme="dark"]{
-  --bg:#0c0c1a; --fg:#d8d8ec; --surface:#141428; --border:#252540;
-  --muted:#8080a0; --muted2:#55556e;
+  --muted2:#55556e;
   --a1:#6aaae0; --a1f:#162a42; --a1t:#aacce8; --a1s:#4888c0;
   --a2:#e86050; --a2f:#3a1818; --a2t:#f0a898; --a2s:#c04838;
   --ok:#38c878; --okf:#142e20; --okt:#78e8a8;
@@ -53,59 +54,15 @@
   --conflict:#ff5858;
   --node:#1e1e38; --node-s:#3a3a58;
   --edge:#3c4060;
-  --btn:#6aaae0; --btn-f:#0c0c1a; --btn-d:#252540;
-  --code:#121228;
   --ct-bg:#161630; --ct-border:#2a2a48;
-  color-scheme:dark
 }
 
-*{box-sizing:border-box;margin:0}
-body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;
-  padding-left:max(16px,env(safe-area-inset-left,0px));
-  padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:24px;max-width:880px;margin:0 auto;line-height:1.6}
-
-h1{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:600;
-  letter-spacing:-.02em;margin-bottom:4px}
-h2{font-family:'JetBrains Mono',monospace;font-size:.9rem;font-weight:600;
-  letter-spacing:-.01em;margin:32px 0 10px;text-transform:uppercase;letter-spacing:.04em;
-  color:var(--muted)}
-h3{font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:600;margin:0 0 8px}
-
-.sub{color:var(--muted);font-size:.82rem;margin:0 0 24px;line-height:1.6;max-width:620px}
-
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-  overflow:hidden;margin-bottom:14px}
-.card-body{padding:18px}
-.graph-wrap{padding:14px 8px;overflow-x:auto}
-.graph-wrap svg{display:block;margin:0 auto}
-
-.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;
-  border-top:1px solid var(--border);background:var(--code)}
-.bar button{font-family:'JetBrains Mono',monospace;font-size:.73rem;
-  padding:5px 14px;border:none;border-radius:5px;cursor:pointer;
-  background:var(--btn);color:var(--btn-f);transition:opacity .15s,background .15s}
-.bar button:hover:not(:disabled){opacity:.85}
-.bar button:disabled{background:var(--btn-d);color:var(--muted);cursor:default;opacity:.55}
-.slab{font-family:'JetBrains Mono',monospace;font-size:.7rem;
-  color:var(--muted);flex:1;text-align:center;font-variant-numeric:tabular-nums}
-
-.desc{font-size:.82rem;line-height:1.75;padding:14px 18px;min-height:70px}
 .desc strong{font-weight:600}
 .ha1{color:var(--a1);font-weight:600}
 .ha2{color:var(--a2);font-weight:600}
 .hok{color:var(--ok);font-weight:600}
 .hwarn{color:var(--warn);font-weight:500}
 .hconflict{color:var(--conflict);font-weight:600}
-
-code{font-family:'JetBrains Mono',monospace;font-size:.76rem;
-  background:var(--code);padding:1px 6px;border-radius:3px}
-
-.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.72rem;color:var(--muted);margin-top:12px}
-.legend-i{display:flex;align-items:center;gap:5px}
-.ldot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-
-svg text{font-family:'JetBrains Mono',monospace}
 
 .concept{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
 .concept-fig{flex:0 0 auto;min-width:0}
@@ -121,7 +78,6 @@ svg text{font-family:'JetBrains Mono',monospace}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .pulse{animation:pulse .8s ease-in-out infinite}
 
-.section-intro{font-size:.84rem;line-height:1.7;margin-bottom:16px;max-width:640px}
 
 /* MDD section — variable aliases map to the CBS palette */
 #mdd-section{
@@ -132,7 +88,7 @@ svg text{font-family:'JetBrains Mono',monospace}
   --constr:var(--warn);--cf:var(--warnf);
   --ec:var(--edge);--ep:#d4a0a0;
   --chk:rgba(61,111,160,0.07);
-  --bb:var(--btn);--bf:var(--btn-f);--bd:var(--btn-d);--cb:var(--code);
+  --bb:var(--btn);--bf:var(--btn-f);--cb:var(--code);
   --grid-wall:#555568;--grid-free:#e8e8f0;--grid-agent:var(--a1);--grid-goal:var(--a2);--grid-path:var(--a1s);
 }
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]) #mdd-section{
@@ -208,9 +164,10 @@ details.mdd-expand>.mdd-content{border:1px solid var(--border);border-top:0;
 .cmp-fig{flex:0 0 auto;min-width:0}
 .cmp-detail{flex:1 1 260px;min-width:0}
 
-.bar-chart{display:flex;gap:16px;align-items:flex-end;height:120px;padding:0 8px;margin:14px 0 6px}
-.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
-.bar-fill{width:100%;max-width:80px;border-radius:4px 4px 0 0;transition:height .4s ease;min-height:4px}
+.bar-chart{display:flex;gap:16px;align-items:stretch;height:170px;padding:0 8px;margin:14px 0 6px}
+/* padding-top reserves room for value + label, so a bar's % height is a share of the bar track */
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0;padding-top:60px}
+.bar-fill{width:100%;max-width:80px;border-radius:4px 4px 0 0;transition:height .4s ease;min-height:4px;flex-shrink:0}
 .bar-label{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted);text-align:center}
 .bar-val{font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums}
 
@@ -223,19 +180,18 @@ details.mdd-expand>.mdd-content{border:1px solid var(--border);border-top:0;
 </style>
 
 <h1>Conflict-Based Search (CBS)</h1>
-<p class="sub">
+<div class="tldr">
   <strong>TLDR:</strong> CBS solves multi-agent pathfinding optimally by splitting the problem into
   two levels — a high-level Constraint Tree that resolves inter-agent conflicts by branching,
   and a low-level A* that replans individual agents under constraints. This avoids the
   exponential joint state space of traditional A* while guaranteeing optimal sum-of-costs solutions.
   MA-CBS extends this by adaptively merging strongly-coupled agents into meta-agents
   to handle pathological open-space cases.
-  <br><br>
-  G. Sharon, R. Stern, A. Felner, N.R. Sturtevant.
+  <span class="cite">G. Sharon, R. Stern, A. Felner, N.R. Sturtevant.
   "Conflict-based search for optimal multi-agent pathfinding."
   <em>Artificial Intelligence</em>, 219, pp. 40–66, 2015.
-  <a href="https://doi.org/10.1016/j.artint.2014.11.006" target="_blank" rel="noopener" style="color:var(--a1)">doi:10.1016/j.artint.2014.11.006</a>
-</p>
+  <a href="https://doi.org/10.1016/j.artint.2014.11.006" target="_blank" rel="noopener">doi:10.1016/j.artint.2014.11.006</a></span>
+</div>
 
 <!-- ============================================================ -->
 <h2>1. The MAPF Problem</h2>
@@ -839,7 +795,11 @@ function drawCTNode(svg,x,y,w,h,data,state){
 
   if(data.title){addLine(data.title,'var(--muted)','9','600');ty+=2;}
   if(data.con!==undefined){addLine('Con: '+data.con,'var(--warn)','9','500');}
-  if(data.sol){
+  if(data.pathA1&&data.pathA2){
+    ty+=4;
+    drawMiniGraph(g,x+(w-100)/2,ty,data.pathA1,data.pathA2,data.conflictNode);
+    ty+=90+6;
+  } else if(data.sol){
     for(const s of data.sol)addLine(s,'var(--fg)','9','400');
   }
   if(data.cost!==undefined){addLine('Cost: '+data.cost,state==='goal'?'var(--ok)':'var(--a1)','10','600');}
@@ -849,6 +809,69 @@ function drawCTNode(svg,x,y,w,h,data,state){
   }
   svg.appendChild(g);
   return g;
+}
+
+function drawMiniGraph(parent,gx,gy,pathA1,pathA2,conflictNode){
+  const nodes={S1:{x:15,y:8},S2:{x:85,y:8},A1:{x:15,y:33},B1:{x:85,y:33},
+    D:{x:50,y:58},G1:{x:15,y:83},G2:{x:85,y:83}};
+  const edges=[['S1','A1'],['S2','B1'],['A1','D'],['B1','D'],['D','G1'],['D','G2']];
+  const labels={S1:'S₁',S2:'S₂',A1:'A₁',B1:'B₁',G1:'G₁',G2:'G₂',D:'D'};
+  function onPath(a,b,path){
+    if(!path)return false;
+    for(let i=0;i<path.length-1;i++){
+      if((path[i]===a&&path[i+1]===b)||(path[i]===b&&path[i+1]===a))return true;
+    }
+    return false;
+  }
+  function findWaits(path){
+    const w=[];
+    if(!path)return w;
+    for(let i=0;i<path.length-1;i++)if(path[i]===path[i+1]&&!w.includes(path[i]))w.push(path[i]);
+    return w;
+  }
+  for(const[a,b]of edges){
+    const na=nodes[a],nb=nodes[b];
+    const onA1=onPath(a,b,pathA1),onA2=onPath(a,b,pathA2);
+    let color='var(--edge)',sw=1,op=0.25;
+    if(onA1){color='var(--a1s)';sw=2.5;op=0.8;}
+    if(onA2){color='var(--a2s)';sw=2.5;op=0.8;}
+    parent.appendChild(svgEl('line',{x1:gx+na.x,y1:gy+na.y,x2:gx+nb.x,y2:gy+nb.y,
+      stroke:color,'stroke-width':sw,opacity:op}));
+  }
+  for(const[name,pos]of Object.entries(nodes)){
+    const isA1=name==='S1'||name==='G1';
+    const isA2=name==='S2'||name==='G2';
+    const r=name==='D'?8:6;
+    const fill=isA1?'var(--a1f)':isA2?'var(--a2f)':'var(--node)';
+    const sc=isA1?'var(--a1)':isA2?'var(--a2)':'var(--node-s)';
+    parent.appendChild(svgEl('circle',{cx:gx+pos.x,cy:gy+pos.y,r,fill,stroke:sc,'stroke-width':'1.5'}));
+    const tc=isA1?'var(--a1t)':isA2?'var(--a2t)':'var(--fg)';
+    parent.appendChild(svgEl('text',{x:gx+pos.x,y:gy+pos.y+3,'text-anchor':'middle',
+      fill:tc,'font-size':'7','font-weight':'600'})).textContent=labels[name];
+  }
+  for(const w of findWaits(pathA1)){
+    const pos=nodes[w];
+    if(pos){
+      parent.appendChild(svgEl('circle',{cx:gx+pos.x,cy:gy+pos.y,r:'11',
+        fill:'none',stroke:'var(--a1)','stroke-width':'1.5','stroke-dasharray':'3 2',opacity:'.7'}));
+      parent.appendChild(svgEl('text',{x:gx+pos.x+14,y:gy+pos.y+3,'text-anchor':'start',
+        fill:'var(--a1)','font-size':'6.5','font-weight':'500'})).textContent='wait';
+    }
+  }
+  for(const w of findWaits(pathA2)){
+    const pos=nodes[w];
+    if(pos){
+      parent.appendChild(svgEl('circle',{cx:gx+pos.x,cy:gy+pos.y,r:'11',
+        fill:'none',stroke:'var(--a2)','stroke-width':'1.5','stroke-dasharray':'3 2',opacity:'.7'}));
+      parent.appendChild(svgEl('text',{x:gx+pos.x-14,y:gy+pos.y+3,'text-anchor':'end',
+        fill:'var(--a2)','font-size':'6.5','font-weight':'500'})).textContent='wait';
+    }
+  }
+  if(conflictNode&&nodes[conflictNode]){
+    const pos=nodes[conflictNode];
+    parent.appendChild(svgEl('circle',{cx:gx+pos.x,cy:gy+pos.y,r:'13',
+      fill:'none',stroke:'var(--conflict)','stroke-width':'2',opacity:'.8'}));
+  }
 }
 
 const ctSteps=[
@@ -909,30 +932,32 @@ function ctRender(){
 
   // Root node
   if(show.has('root-empty')){
-    drawCTNode(ctSvg,260,20,200,60,{title:'Root',con:'{ }',cost:'?'},
+    drawCTNode(ctSvg,260,15,200,60,{title:'Root',con:'{ }',cost:'?'},
       s.active==='root'?'active':'');
   }
   if(show.has('root')){
-    drawCTNode(ctSvg,220,10,280,100,{
+    const rs=s.state==='conflict'&&s.active==='root'?'conflict':
+      s.active==='root'?'active':'';
+    drawCTNode(ctSvg,230,0,260,162,{
       title:'Root',con:'{ }',
-      sol:['a₁: S₁→A₁→D→G₁','a₂: S₂→B₁→D→G₂'],
+      pathA1:['S1','A1','D','G1'],
+      pathA2:['S2','B1','D','G2'],
+      conflictNode:rs==='conflict'?'D':null,
       cost:6
-    },s.state==='conflict'&&s.active==='root'?'conflict':
-      s.active==='root'?'active':'');
+    },rs);
   }
 
   // Edges
   if(show.has('edges')){
-    ctSvg.appendChild(svgEl('line',{x1:300,y1:110,x2:170,y2:170,
+    ctSvg.appendChild(svgEl('line',{x1:308,y1:162,x2:155,y2:198,
       stroke:'var(--edge)',['stroke-width']:'2'}));
-    ctSvg.appendChild(svgEl('line',{x1:420,y1:110,x2:550,y2:170,
+    ctSvg.appendChild(svgEl('line',{x1:412,y1:162,x2:555,y2:198,
       stroke:'var(--edge)',['stroke-width']:'2'}));
-    // Constraint labels on edges
-    const t1=svgEl('text',{x:215,y:148,'text-anchor':'middle',fill:'var(--warn)',
+    const t1=svgEl('text',{x:231,y:186,'text-anchor':'middle',fill:'var(--warn)',
       'font-size':'9','font-weight':'500'});
     t1.textContent='+(a₁,D,2)';
     ctSvg.appendChild(t1);
-    const t2=svgEl('text',{x:505,y:148,'text-anchor':'middle',fill:'var(--warn)',
+    const t2=svgEl('text',{x:481,y:186,'text-anchor':'middle',fill:'var(--warn)',
       'font-size':'9','font-weight':'500'});
     t2.textContent='+(a₂,D,2)';
     ctSvg.appendChild(t2);
@@ -940,31 +965,34 @@ function ctRender(){
 
   // Left child
   if(show.has('left-empty')){
-    drawCTNode(ctSvg,40,175,260,60,{title:'Left Child',con:'{(a₁, D, 2)}'},'');
+    drawCTNode(ctSvg,30,208,260,60,{title:'Left Child',con:'{(a₁, D, 2)}'},'');
   }
   if(show.has('left')){
-    drawCTNode(ctSvg,20,170,300,120,{
+    drawCTNode(ctSvg,15,198,280,165,{
       title:'Left Child',con:'{(a₁, D, 2)}',
-      sol:['a₁: S₁→A₁→A₁→D→G₁','a₂: S₂→B₁→D→G₂'],
+      pathA1:['S1','A1','A1','D','G1'],
+      pathA2:['S2','B1','D','G2'],
       cost:7
     },s.active==='left'?'active':'');
   }
   if(show.has('left-goal')){
-    drawCTNode(ctSvg,20,170,300,130,{
+    drawCTNode(ctSvg,15,198,280,180,{
       title:'Left Child',con:'{(a₁, D, 2)}',
-      sol:['a₁: S₁→A₁→A₁→D→G₁','a₂: S₂→B₁→D→G₂'],
+      pathA1:['S1','A1','A1','D','G1'],
+      pathA2:['S2','B1','D','G2'],
       cost:7
     },'goal');
   }
 
   // Right child
   if(show.has('right-empty')){
-    drawCTNode(ctSvg,420,175,260,60,{title:'Right Child',con:'{(a₂, D, 2)}'},'');
+    drawCTNode(ctSvg,420,208,260,60,{title:'Right Child',con:'{(a₂, D, 2)}'},'');
   }
   if(show.has('right')){
-    drawCTNode(ctSvg,400,170,300,130,{
+    drawCTNode(ctSvg,410,198,280,180,{
       title:'Right Child',con:'{(a₂, D, 2)}',
-      sol:['a₁: S₁→A₁→D→G₁','a₂: S₂→B₁→B₁→D→G₂'],
+      pathA1:['S1','A1','D','G1'],
+      pathA2:['S2','B1','B1','D','G2'],
       cost:7
     },'');
   }

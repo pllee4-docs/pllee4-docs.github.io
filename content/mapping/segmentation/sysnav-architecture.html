@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SysNav Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+<!-- Shared look and diagram blocks come from assets/explainer.css (injected by build.py). -->
+<style>
+/* Page-specific layout only */
+
+/* Detection mini pipeline inside the overview panel */
+.mini-flow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.mini-flow .chip { padding: 4px 8px; }
+
+/* Room segmentation panel: floor plan beside the step list */
+.split { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center; }
+.split > svg { flex: 0 0 auto; }
+.split > ul { flex: 1 1 170px; min-width: 0; }
+
+/* Sans labels inside SVG (narrower than mono for long phrases) */
+svg .sans text, svg text.sans { font-family: var(--sans); }
+
+/* Cross-room navigation */
+.xroom { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; }
+.xroom .grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.xroom .go { display: flex; flex-direction: column; align-items: center; font: 600 .72rem/1.2 var(--mono); color: var(--k, var(--c)); }
+.xroom .go::after { content: "\2192"; font-size: 1.1rem; color: var(--k, var(--c)); }
+.xroom .or { font: 400 1rem/1 var(--mono); color: var(--dim); }
+.xroom .pick { display: flex; flex-direction: column; gap: 4px; }
+.xroom .hint { font: 400 .76rem/1.3 var(--mono); color: var(--dim); }
+
+/* Robot embodiment cards */
+.robot { display: flex; align-items: center; gap: 12px; }
+.robot svg { flex: 0 0 44px; }
+.robot b { display: block; font: 600 .86rem/1.3 var(--mono); color: var(--h); }
+.robot span { display: block; font-size: .8rem; color: var(--dim); line-height: 1.4; }
+
+/* VLM hub with its query fan */
+.hub {
+  align-self: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 128px; height: 128px; border-radius: 50%;
+  border: 2.5px solid var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  color: var(--amber); font: 700 .95rem/1.35 var(--mono); text-align: center;
+}
+.fan { position: relative; border-top: 1.5px solid var(--c); padding-top: 18px; margin-top: 14px; }
+.fan::before { content: ""; position: absolute; left: 50%; top: -27px; height: 26px; border-left: 1.5px solid var(--c); }
+
+/* Code map file rows */
+.file {
+  --k: var(--blue);
+  border: 1.2px solid color-mix(in srgb, var(--k) 70%, transparent);
+  background: color-mix(in srgb, var(--k) 6%, transparent);
+  border-radius: 6px; padding: 7px 10px;
+}
+.file b { display: block; font: 600 .82rem/1.35 var(--mono); color: var(--k); overflow-wrap: anywhere; }
+.file span { display: block; font-size: .78rem; color: var(--dim); line-height: 1.45; }
+.file.note { text-align: left; }
+.file.note b { font-weight: 500; font-size: .78rem; }
+.files { display: flex; flex-direction: column; gap: 7px; }
+
+/* Published topics row */
+.pub { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: .8rem; color: var(--dim); }
+.pub b { font: 600 .82rem/1 var(--mono); color: var(--h); }
+.pub span { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); }
+.pub i { width: 10px; height: 10px; border-radius: 50%; background: var(--k); display: inline-block; }
+
+/* Room segmentation steps: 3 equal + wider door card on wide screens */
+@container (min-width: 860px) {
+  .steps.ws { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr); }
+}
+.door-figs { display: flex; flex-direction: column; gap: 10px; }
+</style>
+</head>
+<body>
+<div class="w">
+
+<h1>SysNav — Complete System Architecture</h1>
+
+<div class="tldr">
+  <strong>TLDR:</strong> SysNav is a three-level object navigation system that decouples semantic reasoning (VLM), navigation planning, and motion control to enable reliable, building-scale object search across wheeled robots, quadrupeds, and humanoids. It restricts VLM reasoning to room-level decisions and uses classical exploration within rooms, achieving 4-5× efficiency gains over baselines in 190 real-world experiments.
+  <span class="cite">Haokun Zhu, Zongtai Li, Zihan Liu, Kevin Guo, Zhengzhi Lin, Yuxin Cai, Guofei Chen, Chen Lv, Wenshan Wang, Jean Oh, Ji Zhang. Carnegie Mellon University, NYU, NTU. March 2026.<br>
+  <a href="https://arxiv.org/abs/2603.06914" target="_blank" rel="noopener">arXiv:2603.06914</a> · <a href="https://cmu-vln.github.io/" target="_blank" rel="noopener">Project Page</a></span>
+</div>
+
+<nav class="jump">
+  <a href="#overview">Overview</a>
+  <a href="#graph">Scene Graph</a>
+  <a href="#detection">Detection Pipeline</a>
+  <a href="#vlm">VLM Reasoning</a>
+  <a href="#wall">Wall Detection</a>
+  <a href="#watershed">Room Segmentation</a>
+  <a href="#nav">Navigation Strategy</a>
+  <a href="#code">Code Map</a>
+</nav>
+
+<!-- ========================================================== -->
+<!--  1. THREE-LEVEL OVERVIEW                                    -->
+<!-- ========================================================== -->
+<div class="sec" id="overview">
+  <div class="sec-d" style="background:var(--blue);color:var(--bg);">1</div>
+  <h2 class="sec-t">Three-Level System Overview</h2>
+</div>
+
+<div class="dg">
+  <div class="chips center">
+    <span class="chip lg" style="--k:var(--blue)">360° Camera</span>
+    <span class="chip lg" style="--k:var(--cyan)">LiDAR</span>
+  </div>
+  <div class="down"></div>
+
+  <!-- HIGH LEVEL -->
+  <div class="lvl" style="--k:var(--blue)">
+    <span class="lvl-tag">HIGH LEVEL</span>
+    <div class="cells">
+      <div class="panel">
+        <div class="panel-t">Three-Layer Scene Graph</div>
+        <div class="fig">
+          <svg viewBox="0 0 200 100" role="img" aria-label="Rooms, viewpoints and objects in three layers">
+            <g stroke="var(--amber)" stroke-width="1.5"><line x1="51" y1="18" x2="89" y2="18"/><line x1="111" y1="18" x2="149" y2="18"/></g>
+            <g stroke="var(--c)" stroke-width=".8" stroke-dasharray="2,2">
+              <line x1="34" y1="27" x2="27" y2="44"/><line x1="46" y1="27" x2="53" y2="44"/>
+              <line x1="95" y1="28" x2="93" y2="44"/><line x1="105" y1="28" x2="123" y2="44"/>
+              <line x1="160" y1="29" x2="164" y2="44"/>
+              <line x1="22" y1="58" x2="16" y2="79"/><line x1="28" y1="58" x2="34" y2="79"/>
+              <line x1="58" y1="58" x2="64" y2="79"/><line x1="95" y1="58" x2="99" y2="79"/>
+              <line x1="127" y1="58" x2="130" y2="79"/><line x1="166" y1="58" x2="169" y2="79"/>
+            </g>
+            <g fill="color-mix(in srgb, var(--amber) 20%, transparent)" stroke="var(--amber)" stroke-width="1.8">
+              <circle cx="40" cy="18" r="11"/><circle cx="100" cy="18" r="11"/><circle cx="160" cy="18" r="11"/>
+            </g>
+            <g fill="var(--amber)" font-size="11.5" font-weight="700" text-anchor="middle">
+              <text x="40" y="22">R₁</text><text x="100" y="22">R₂</text><text x="160" y="22">R₃</text>
+            </g>
+            <g fill="color-mix(in srgb, var(--teal) 20%, transparent)" stroke="var(--teal)" stroke-width="1.4">
+              <circle cx="25" cy="51" r="9.5"/><circle cx="55" cy="51" r="9.5"/><circle cx="93" cy="51" r="9.5"/><circle cx="125" cy="51" r="9.5"/><circle cx="165" cy="51" r="9.5"/>
+            </g>
+            <g fill="var(--teal)" font-size="10.5" font-weight="700" text-anchor="middle">
+              <text x="25" y="55">V</text><text x="55" y="55">V</text><text x="93" y="55">V</text><text x="125" y="55">V</text><text x="165" y="55">V</text>
+            </g>
+            <g fill="color-mix(in srgb, var(--rose) 30%, transparent)" stroke="var(--rose)" stroke-width="1">
+              <circle cx="15" cy="85" r="5"/><circle cx="35" cy="85" r="5"/><circle cx="65" cy="85" r="5"/><circle cx="100" cy="85" r="5"/><circle cx="131" cy="85" r="5"/><circle cx="170" cy="85" r="5"/>
+            </g>
+          </svg>
+        </div>
+        <div class="chips center" style="margin-top:8px">
+          <span class="chip" style="--k:var(--amber)">● Room</span>
+          <span class="chip" style="--k:var(--teal)">● Viewpoint</span>
+          <span class="chip" style="--k:var(--rose)">● Object</span>
+        </div>
+        <p class="cap">5 edge types connect layers</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-t">Detection → 3D Mapping</div>
+        <div class="mini-flow">
+          <span class="chip" style="--k:var(--dim)">image</span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--teal)">YOLOE<small>detect</small><small>+track</small></span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--violet)">SAM2<small>segment</small></span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--blue)">LiDAR<br>Fuse</span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--green)">3D obj</span>
+        </div>
+        <div class="mini-flow" style="margin-top:12px">
+          <span class="chip" style="--k:var(--dim)">track ID match</span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--dim)">dist &lt; 0.25m</span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--dim)">3D IoU&gt;0.2</span><span class="sep">→</span>
+          <span class="chip" style="--k:var(--dim)">DBSCAN bbox</span>
+        </div>
+        <p class="cap">object merge pipeline</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-t">VLM Reasoning (Gemini 2.5 Flash)</div>
+        <div class="chips center">
+          <span class="chip lg" style="--k:var(--amber)">Gemini<br>VLM</span>
+        </div>
+        <div class="chips center" style="margin-top:10px">
+          <span class="chip" style="--k:var(--violet)">Parse Instr.</span>
+          <span class="chip" style="--k:var(--amber)">Room Type</span>
+          <span class="chip" style="--k:var(--teal)">Next Room</span>
+          <span class="chip" style="--k:var(--green)">Early Stop</span>
+          <span class="chip" style="--k:var(--rose)">Obj Match</span>
+          <span class="chip" style="--k:var(--cyan)">Spatial Check</span>
+        </div>
+        <p class="cap">All queries → structured JSON via OpenAI-compatible API</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="down">semantic guidance + scene info</div>
+
+  <!-- MID LEVEL -->
+  <div class="lvl" style="--k:var(--teal)">
+    <span class="lvl-tag">MID LEVEL</span>
+    <div class="cells">
+      <div class="panel">
+        <div class="panel-t">Room Segmentation</div>
+        <div class="split">
+          <svg width="112" viewBox="0 0 100 66" role="img" aria-label="Floor plan split into four rooms">
+            <rect x="0" y="0" width="100" height="66" rx="3" fill="var(--bg)" opacity=".6"/>
+            <rect x="4" y="4" width="42" height="30" fill="var(--rose)" opacity=".15"/>
+            <rect x="50" y="4" width="46" height="30" fill="var(--teal)" opacity=".15"/>
+            <rect x="4" y="38" width="42" height="24" fill="var(--violet)" opacity=".15"/>
+            <rect x="50" y="38" width="46" height="24" fill="var(--green)" opacity=".15"/>
+            <g stroke="var(--h)" stroke-width="2.5">
+              <line x1="2" y1="2" x2="98" y2="2"/><line x1="2" y1="2" x2="2" y2="64"/>
+              <line x1="98" y1="2" x2="98" y2="64"/><line x1="2" y1="64" x2="98" y2="64"/>
+              <line x1="48" y1="2" x2="48" y2="36"/><line x1="2" y1="36" x2="40" y2="36"/>
+              <line x1="62" y1="36" x2="98" y2="36"/>
+            </g>
+            <g stroke="var(--amber)" stroke-width="2" stroke-dasharray="2,2">
+              <line x1="48" y1="38" x2="48" y2="48"/><line x1="42" y1="36" x2="60" y2="36"/>
+            </g>
+            <g font-size="11" font-weight="700" text-anchor="middle">
+              <text x="25" y="23" fill="var(--rose)">R1</text><text x="73" y="23" fill="var(--teal)">R2</text>
+              <text x="25" y="54" fill="var(--violet)">R3</text><text x="73" y="54" fill="var(--green)">R4</text>
+            </g>
+          </svg>
+          <ul>
+            <li>① Region Growing (planes)</li>
+            <li>② Filter vertical walls</li>
+            <li>③ Height histogram merge</li>
+            <li>④ Watershed segmentation</li>
+            <li>⑤ Door detect → adjacency</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-t">In-Room Exploration</div>
+        <div class="split">
+          <svg width="150" viewBox="0 0 112 60" role="img" aria-label="Coverage path through a room">
+            <rect x="1" y="1" width="110" height="58" rx="4" fill="var(--bg)" opacity=".5" stroke="var(--teal)" stroke-dasharray="3,2"/>
+            <polyline points="10,9 38,9 38,23 10,23 10,37 38,37 38,51 10,51" fill="none" stroke="var(--green)" stroke-width="1.6" stroke-linecap="round"/>
+            <g fill="var(--green)" opacity=".85">
+              <circle cx="38" cy="9" r="2.8"/><circle cx="38" cy="23" r="2.8"/><circle cx="10" cy="23" r="2.8"/>
+              <circle cx="10" cy="37" r="2.8"/><circle cx="38" cy="37" r="2.8"/><circle cx="38" cy="51" r="2.8"/><circle cx="10" cy="51" r="2.8"/>
+            </g>
+            <circle cx="10" cy="9" r="7" fill="var(--s)" stroke="var(--amber)" stroke-width="1.5"/>
+            <text x="10" y="12.5" text-anchor="middle" fill="var(--amber)" font-size="9" font-weight="700">R</text>
+            <rect x="48" y="6" width="59" height="48" rx="2" fill="var(--dim)" opacity=".1"/>
+            <g fill="var(--dim)" font-size="10" text-anchor="middle"><text x="77.5" y="28">uncovered</text><text x="77.5" y="41">surface</text></g>
+          </svg>
+          <ul>
+            <li>• Pose sampling by surface coverage</li>
+            <li>• TSP path through candidates</li>
+            <li>• Local + global planning</li>
+            <li>• Rolling window coordination</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-t">Cross-Room Navigation</div>
+        <div class="xroom">
+          <div class="grp">
+            <span class="chip" style="--k:var(--amber)">Kitchen<small>exploring...</small></span>
+            <span class="go" style="--k:var(--green)">early stop!</span>
+            <span class="chip" style="--k:var(--teal)">Bedroom<small>glimpsed</small></span>
+          </div>
+          <span class="or">or</span>
+          <div class="grp">
+            <span class="chip" style="--k:var(--rose)">Lounge<small>done ✓</small></span>
+            <span class="go"></span>
+            <span class="pick">
+              <span class="chip" style="--k:var(--amber)">Bedroom</span>
+              <span class="chip" style="--k:var(--teal)">Kitchen</span>
+            </span>
+            <span class="hint">← VLM picks</span>
+          </div>
+        </div>
+        <p class="cap">VLM decides room transitions · rooms are the minimal semantic planning unit</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="down">waypoints</div>
+
+  <!-- LOW LEVEL -->
+  <div class="lvl" style="--k:var(--amber)">
+    <span class="lvl-tag">LOW LEVEL</span>
+    <div class="cells">
+      <div class="panel robot">
+        <svg width="44" viewBox="0 0 44 36" aria-hidden="true">
+          <rect x="6" y="6" width="32" height="18" rx="3" fill="var(--amber)" fill-opacity=".15" stroke="var(--amber)"/>
+          <circle cx="12" cy="28" r="5" fill="var(--amber)" fill-opacity=".3" stroke="var(--amber)"/>
+          <circle cx="32" cy="28" r="5" fill="var(--amber)" fill-opacity=".3" stroke="var(--amber)"/>
+        </svg>
+        <div><b>Mecanum</b><span>Wheeled robot</span><span>omnidirectional</span></div>
+      </div>
+      <div class="panel robot">
+        <svg width="44" viewBox="0 0 44 36" aria-hidden="true">
+          <rect x="7" y="6" width="30" height="13" rx="2" fill="var(--teal)" fill-opacity=".15" stroke="var(--teal)"/>
+          <g stroke="var(--teal)" stroke-width="1.8"><line x1="10" y1="19" x2="10" y2="32"/><line x1="18" y1="19" x2="18" y2="32"/><line x1="26" y1="19" x2="26" y2="32"/><line x1="34" y1="19" x2="34" y2="32"/></g>
+        </svg>
+        <div><b>Unitree Go2</b><span>Quadruped</span><span>built-in LiDAR</span></div>
+      </div>
+      <div class="panel robot">
+        <svg width="44" viewBox="0 0 44 36" aria-hidden="true">
+          <circle cx="22" cy="7" r="5" fill="var(--violet)" fill-opacity=".15" stroke="var(--violet)"/>
+          <g stroke="var(--violet)" stroke-width="1.8"><line x1="22" y1="12" x2="22" y2="24"/><line x1="14" y1="17" x2="30" y2="17"/><line x1="22" y1="24" x2="16" y2="33"/><line x1="22" y1="24" x2="28" y2="33"/></g>
+        </svg>
+        <div><b>Unitree G1</b><span>Humanoid</span><span>bipedal locomotion</span></div>
+      </div>
+      <div class="panel span">
+        <div class="panel-t">Base Autonomy Module</div>
+        <div class="chips center">
+          <span class="chip" style="--k:var(--green)">Path Following</span>
+          <span class="chip" style="--k:var(--blue)">Collision Avoidance</span>
+          <span class="chip" style="--k:var(--amber)">Terrain Analysis</span>
+          <span class="chip" style="--k:var(--rose)">Motion Control</span>
+          <span class="chip" style="--k:var(--violet)">SLAM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  2. SCENE GRAPH                                             -->
+<!-- ========================================================== -->
+<div class="sec" id="graph">
+  <div class="sec-d" style="background:var(--violet);color:var(--bg);">2</div>
+  <h2 class="sec-t">Three-Layer Scene Graph &amp; Five Edge Types</h2>
+</div>
+
+<div class="dg">
+  <div class="fig fig-scroll" style="--minw:740px">
+    <svg viewBox="0 0 760 270" role="img" aria-label="Scene graph with room, viewpoint and object layers">
+      <rect x="100" y="2" width="656" height="102" rx="8" fill="var(--amber)" opacity=".06"/>
+      <rect x="100" y="106" width="656" height="70" rx="8" fill="var(--teal)" opacity=".06"/>
+      <rect x="100" y="184" width="656" height="70" rx="8" fill="var(--rose)" opacity=".06"/>
+      <g font-size="13" font-weight="700" text-anchor="middle">
+        <text x="50" y="50" fill="var(--amber)">Room</text>
+        <text x="50" y="146" fill="var(--teal)">Viewpoint</text>
+        <text x="50" y="224" fill="var(--rose)">Object</text>
+      </g>
+
+      <!-- R-R edges with door labels -->
+      <g stroke="var(--amber)" stroke-width="2"><line x1="238" y1="44" x2="392" y2="44"/><line x1="468" y1="44" x2="622" y2="44"/></g>
+      <g fill="var(--s)" stroke="var(--amber)"><rect x="293" y="33" width="44" height="22" rx="5"/><rect x="523" y="33" width="44" height="22" rx="5"/></g>
+      <g fill="var(--amber)" font-size="12" font-weight="600" text-anchor="middle"><text x="315" y="48">door</text><text x="545" y="48">door</text></g>
+
+      <!-- R-V edges -->
+      <g stroke="var(--c)" stroke-width="1.3" stroke-dasharray="5,4">
+        <line x1="180" y1="104" x2="161" y2="126"/><line x1="220" y1="104" x2="239" y2="126"/>
+        <line x1="410" y1="104" x2="392" y2="126"/><line x1="450" y1="104" x2="469" y2="126"/>
+        <line x1="660" y1="104" x2="660" y2="126"/>
+      </g>
+      <!-- V-O edges -->
+      <g stroke="var(--c)" stroke-width="1" stroke-dasharray="2,3">
+        <line x1="150" y1="157" x2="135" y2="202"/><line x1="160" y1="157" x2="182" y2="202"/>
+        <line x1="242" y1="157" x2="196" y2="202"/><line x1="252" y1="157" x2="266" y2="202"/>
+        <line x1="382" y1="157" x2="372" y2="202"/><line x1="392" y1="157" x2="430" y2="202"/>
+        <line x1="472" y1="157" x2="446" y2="202"/><line x1="482" y1="157" x2="496" y2="202"/>
+        <line x1="660" y1="157" x2="660" y2="200"/>
+      </g>
+      <!-- O-O spatial -->
+      <line x1="394" y1="222" x2="416" y2="222" stroke="var(--rose)" stroke-width="1.8" stroke-dasharray="4,3"/>
+      <text x="405" y="210" text-anchor="middle" fill="var(--rose)" font-size="11.5" font-weight="600">near</text>
+
+      <!-- Room nodes -->
+      <g fill="color-mix(in srgb, var(--amber) 15%, var(--bg))" stroke="var(--amber)" stroke-width="2.5">
+        <circle cx="200" cy="44" r="38"/><circle cx="430" cy="44" r="38"/><circle cx="660" cy="44" r="38"/>
+      </g>
+      <g fill="var(--amber)" font-size="11.5" font-weight="700" text-anchor="middle">
+        <text x="200" y="48">Kitchen</text><text x="430" y="48">Living Rm</text><text x="660" y="48">Bedroom</text>
+      </g>
+      <g class="sans" fill="var(--dim)" font-size="11.5" text-anchor="middle">
+        <text x="200" y="98">mask · type · img</text><text x="430" y="98">mask · type · img</text><text x="660" y="98">mask · type · img</text>
+      </g>
+
+      <!-- Viewpoints -->
+      <g fill="color-mix(in srgb, var(--teal) 15%, var(--bg))" stroke="var(--teal)" stroke-width="2">
+        <circle cx="155" cy="141" r="16"/><circle cx="247" cy="141" r="16"/><circle cx="387" cy="141" r="16"/><circle cx="477" cy="141" r="16"/><circle cx="660" cy="141" r="16"/>
+      </g>
+      <g fill="var(--teal)" font-size="12" font-weight="700" text-anchor="middle">
+        <text x="155" y="145">v₁</text><text x="247" y="145">v₂</text><text x="387" y="145">v₃</text><text x="477" y="145">v₄</text><text x="660" y="145">v₅</text>
+      </g>
+
+      <!-- Objects -->
+      <g fill="color-mix(in srgb, var(--rose) 15%, var(--bg))" stroke="var(--rose)" stroke-width="1.6">
+        <circle cx="130" cy="222" r="23"/><circle cx="188" cy="222" r="23"/><circle cx="270" cy="222" r="23"/>
+        <circle cx="370" cy="222" r="23"/><circle cx="440" cy="222" r="23"/><circle cx="500" cy="222" r="23"/><circle cx="660" cy="222" r="23"/>
+      </g>
+      <g fill="var(--rose)" font-size="11" font-weight="600" text-anchor="middle">
+        <text x="130" y="226">fridge</text><text x="188" y="226">table</text><text x="270" y="226">chair</text>
+        <text x="370" y="226">sofa</text><text x="440" y="226">TV</text><text x="500" y="226">cup</text><text x="660" y="226">bed</text>
+      </g>
+    </svg>
+  </div>
+  <div class="legend" style="justify-content:center;font-size:.8rem;gap:10px 22px;margin-top:0">
+    <span class="legend-i"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--amber)" stroke-width="2"/></svg>R–R (doorway)</span>
+    <span class="legend-i"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--c)" stroke-width="1.5" stroke-dasharray="5,4"/></svg>R–V (belonging)</span>
+    <span class="legend-i"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--c)" stroke-width="1.2" stroke-dasharray="2,3"/></svg>V–O (visibility)</span>
+    <span class="legend-i"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--rose)" stroke-width="1.8" stroke-dasharray="4,3"/></svg>O–O (spatial)</span>
+    <span class="legend-i">+ R–O (containment, implicit from R–V + V–O)</span>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  3. DETECTION PIPELINE                                      -->
+<!-- ========================================================== -->
+<div class="sec" id="detection">
+  <div class="sec-d" style="background:var(--teal);color:var(--bg);">3</div>
+  <h2 class="sec-t">Object Detection → 3D Mapping Pipeline</h2>
+</div>
+
+<div class="dg">
+  <div class="flow">
+    <div class="node" style="--k:var(--blue)">
+      <div class="fig">
+        <svg viewBox="0 0 110 50" style="max-width:220px" role="img" aria-label="Panorama with three detection boxes">
+          <rect x="1" y="1" width="108" height="48" rx="5" fill="var(--bg)"/>
+          <rect x="6" y="8" width="30" height="32" rx="3" fill="var(--teal)" fill-opacity=".2" stroke="var(--teal)"/>
+          <rect x="40" y="5" width="34" height="38" rx="3" fill="var(--rose)" fill-opacity=".2" stroke="var(--rose)"/>
+          <rect x="77" y="11" width="29" height="28" rx="3" fill="var(--violet)" fill-opacity=".2" stroke="var(--violet)"/>
+          <g font-size="11" text-anchor="middle"><text x="21" y="28" fill="var(--teal)">bbox</text><text x="57" y="28" fill="var(--rose)">bbox</text><text x="91.5" y="29" fill="var(--violet)">bbox</text></g>
+        </svg>
+      </div>
+      <div class="node-t" style="margin:8px 0 0">360° Panorama</div>
+    </div>
+    <div class="node" style="--k:var(--teal)">
+      <div class="node-t">YOLOE-26x</div>
+      <p class="node-l">TensorRT · 640×1920</p>
+      <p class="node-l">+ BoTSORT tracker</p>
+      <p class="node-l out">→ bbox + track ID</p>
+    </div>
+    <div class="node" style="--k:var(--violet)">
+      <div class="node-t">SAM 2.1</div>
+      <p class="node-l">hiera_base_plus</p>
+      <p class="node-l">bbox prompt → mask</p>
+      <p class="node-l out">→ pixel-precise mask</p>
+    </div>
+    <div class="node" style="--k:var(--blue)">
+      <div class="node-t">LiDAR Fusion</div>
+      <p class="node-l">project pts → mask overlay</p>
+      <p class="node-l">depth jump filter</p>
+      <p class="node-l out">→ per-object 3D cloud</p>
+    </div>
+    <div class="node" style="--k:var(--rose)">
+      <div class="node-t">ObjMapper</div>
+      <p class="node-l">voxelized (0.03m)</p>
+      <p class="node-l">merge by trackID + IoU</p>
+      <p class="node-l out">→ persistent objects</p>
+    </div>
+  </div>
+  <div class="down"></div>
+  <div class="node" style="--k:var(--green)">
+    <div class="node-t">SingleObject → Object Node</div>
+    <p class="node-l">DBSCAN shape regularization</p>
+    <p class="node-l">Oriented 3D bbox (rotating calipers on convex hull)</p>
+    <p class="node-l">Multi-label weighted voting · observation angle tracking</p>
+    <p class="node-l out">→ label, confidence, bbox, position, best_image</p>
+  </div>
+  <div class="box">
+    <div class="box-t">Code Files (src/semantic_mapping/semantic_mapping/)</div>
+    <div class="chips center">
+      <span class="chip" style="--k:var(--teal)">detection_node.py</span>
+      <span class="chip" style="--k:var(--violet)">semantic_mapping_node.py</span>
+      <span class="chip" style="--k:var(--blue)">cloud_image_fusion.py</span>
+      <span class="chip" style="--k:var(--rose)">semantic_map_new.py</span>
+      <span class="chip" style="--k:var(--green)">single_object_new.py</span>
+      <span class="chip" style="--k:var(--amber)">vlm_reasoning_node.py</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  4. VLM REASONING                                           -->
+<!-- ========================================================== -->
+<div class="sec" id="vlm">
+  <div class="sec-d" style="background:var(--amber);color:var(--bg);">4</div>
+  <h2 class="sec-t">VLM Query Types &amp; Navigation Flow</h2>
+</div>
+
+<div class="dg">
+  <div class="hub">Gemini<br>2.5 Flash</div>
+  <div class="fan">
+    <div class="cells" style="grid-template-columns:repeat(auto-fit,minmax(250px,1fr))">
+      <div class="node" style="--k:var(--violet)">
+        <div class="node-t">① Instruction Parse</div>
+        <p class="node-l">"find the red chair near the sofa"</p>
+        <p class="node-l">→ target · room · spatial · attribute</p>
+        <p class="node-l">→ anchor object + its attributes</p>
+      </div>
+      <div class="node" style="--k:var(--amber)">
+        <div class="node-t">② Room Type</div>
+        <p class="node-l">RGB image + room mask</p>
+        <p class="node-l">→ "Kitchen" / "Bedroom" / ...</p>
+      </div>
+      <div class="node" style="--k:var(--teal)">
+        <div class="node-t">③ Next Room</div>
+        <p class="node-l">Room list + objects + distances</p>
+        <p class="node-l">Chain-of-thought → room_id</p>
+      </div>
+      <div class="node" style="--k:var(--green)">
+        <div class="node-t">④ Early Stop</div>
+        <p class="node-l">Current room vs nearby room image</p>
+        <p class="node-l">→ early_stop: true/false</p>
+      </div>
+      <div class="node" style="--k:var(--rose)">
+        <div class="node-t">⑤ Target Match</div>
+        <p class="node-l">Close-up + spatial viewpoints</p>
+        <p class="node-l">Attribute + room + spatial → is_target</p>
+      </div>
+      <div class="node" style="--k:var(--cyan)">
+        <div class="node-t">⑥ Object Verify</div>
+        <p class="node-l">Cropped image + candidate labels</p>
+        <p class="node-l">→ correct label for detection</p>
+      </div>
+    </div>
+  </div>
+  <div class="box">
+    <div class="box-t">Room-Based Navigation Flow</div>
+    <div class="flow">
+      <span class="chip" style="--k:var(--teal);justify-content:center">In-room exploration (coverage)</span>
+      <span class="chip" style="--k:var(--green);justify-content:center">Early-stop: VLM interrupts → switch room</span>
+      <span class="chip" style="--k:var(--amber);justify-content:center">Room-query: VLM picks next room after finish</span>
+      <span class="chip" style="--k:var(--rose);justify-content:center">Target match: VLM verifies → navigation done</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  5. WALL DETECTION                                          -->
+<!-- ========================================================== -->
+<div class="sec" id="wall">
+  <div class="sec-d" style="background:var(--teal);color:var(--bg);">5</div>
+  <h2 class="sec-t">Wall Detection — getWall() Deep Dive</h2>
+</div>
+
+<div class="dg">
+  <div class="steps">
+    <div class="node" style="--k:var(--teal)">
+      <div class="node-t">① Region Growing</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 90" role="img" aria-label="Point clusters grown into planes">
+          <rect x="0" y="0" width="160" height="90" rx="4" fill="var(--bg)" opacity=".5"/>
+          <ellipse cx="40" cy="45" rx="30" ry="14" fill="var(--teal)" fill-opacity=".06" stroke="var(--teal)" stroke-width=".7" stroke-dasharray="2,2"/>
+          <g fill="var(--teal)" opacity=".7"><circle cx="15" cy="40" r="2.5"/><circle cx="25" cy="43" r="2.5"/><circle cx="35" cy="41" r="2.5"/><circle cx="45" cy="44" r="2.5"/><circle cx="55" cy="42" r="2.5"/><circle cx="65" cy="46" r="2.5"/><circle cx="20" cy="48" r="2.5"/><circle cx="30" cy="50" r="2.5"/><circle cx="40" cy="47" r="2.5"/><circle cx="50" cy="49" r="2.5"/><circle cx="60" cy="48" r="2.5"/></g>
+          <ellipse cx="120" cy="45" rx="28" ry="16" fill="var(--violet)" fill-opacity=".06" stroke="var(--violet)" stroke-width=".7" stroke-dasharray="2,2"/>
+          <g fill="var(--violet)" opacity=".7"><circle cx="98" cy="35" r="2.5"/><circle cx="108" cy="38" r="2.5"/><circle cx="118" cy="36" r="2.5"/><circle cx="128" cy="39" r="2.5"/><circle cx="138" cy="37" r="2.5"/><circle cx="100" cy="45" r="2.5"/><circle cx="110" cy="48" r="2.5"/><circle cx="120" cy="46" r="2.5"/><circle cx="130" cy="49" r="2.5"/><circle cx="140" cy="47" r="2.5"/><circle cx="105" cy="55" r="2.5"/><circle cx="115" cy="53" r="2.5"/><circle cx="125" cy="56" r="2.5"/><circle cx="135" cy="54" r="2.5"/></g>
+          <ellipse cx="80" cy="80" rx="40" ry="7" fill="var(--rose)" fill-opacity=".06" stroke="var(--rose)" stroke-width=".7" stroke-dasharray="2,2"/>
+          <g fill="var(--rose)" opacity=".45"><circle cx="45" cy="79" r="2"/><circle cx="58" cy="81" r="2"/><circle cx="71" cy="80" r="2"/><circle cx="84" cy="82" r="2"/><circle cx="97" cy="81" r="2"/><circle cx="110" cy="79" r="2"/></g>
+        </svg>
+      </div>
+      <p class="node-l" style="margin-top:8px">smoothness &lt;3° · min 300 pts · 50 neighbors</p>
+    </div>
+
+    <div class="node" style="--k:var(--teal)">
+      <div class="node-t">② Filter Vertical</div>
+      <div class="fig">
+        <svg viewBox="0 0 180 90" role="img" aria-label="Side view keeping tall vertical planes">
+          <rect x="0" y="0" width="180" height="90" rx="4" fill="var(--bg)" opacity=".5"/>
+          <line x1="5" y1="85" x2="150" y2="85" stroke="var(--bd)"/><line x1="5" y1="5" x2="5" y2="85" stroke="var(--bd)"/>
+          <rect x="5" y="12" width="145" height="55" fill="var(--teal)" fill-opacity=".05"/>
+          <g stroke="var(--teal)" stroke-width=".8" stroke-dasharray="3,2"><line x1="5" y1="12" x2="150" y2="12"/><line x1="5" y1="67" x2="150" y2="67"/></g>
+          <g fill="var(--teal)" font-size="9.5"><text x="152" y="16">2.0m</text><text x="152" y="71">0.1m</text></g>
+          <text x="10" y="11" fill="var(--dim)" font-size="9.5">Z</text>
+          <rect x="28" y="12" width="5" height="55" rx="1" fill="var(--teal)" opacity=".55"/>
+          <line x1="31" y1="38" x2="50" y2="38" stroke="var(--teal)" stroke-width="1.2"/>
+          <text x="52" y="42" fill="var(--green)" font-size="11">✓</text>
+          <rect x="122" y="12" width="5" height="55" rx="1" fill="var(--violet)" opacity=".55"/>
+          <line x1="125" y1="30" x2="138" y2="30" stroke="var(--violet)" stroke-width="1.2"/>
+          <text x="139" y="34" fill="var(--green)" font-size="11">✓</text>
+          <rect x="40" y="78" width="40" height="4" rx="1" fill="var(--rose)" opacity=".45"/>
+          <text x="83" y="84" fill="var(--rose)" font-size="10">✗ floor</text>
+          <rect x="64" y="52" width="4" height="15" rx="1" fill="var(--dim)" opacity=".45"/>
+          <text x="71" y="63" fill="var(--rose)" font-size="10">✗ &lt;1.5m</text>
+        </svg>
+      </div>
+      <p class="node-l" style="margin-top:8px">reject horizontal · variance &lt;0.1 · height &gt;1.5m</p>
+    </div>
+
+    <div class="node" style="--k:var(--teal)">
+      <div class="node-t">③ Merge Planes</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 90" role="img" aria-label="Two plane segments merged by RANSAC">
+          <rect x="0" y="0" width="160" height="90" rx="4" fill="var(--bg)" opacity=".5"/>
+          <text x="80" y="11" text-anchor="middle" fill="var(--dim)" font-size="8.5">frame t</text>
+          <rect x="10" y="17" width="60" height="7" rx="2" fill="var(--teal)" opacity=".55"/>
+          <rect x="50" y="17" width="55" height="7" rx="2" fill="var(--blue)" opacity=".55"/>
+          <line x1="105" y1="17" x2="122" y2="13" stroke="var(--teal)" stroke-width=".9"/>
+          <line x1="105" y1="17" x2="124" y2="17" stroke="var(--blue)" stroke-width=".9"/>
+          <text x="127" y="19" fill="var(--dim)" font-size="8.5">&lt;6°</text>
+          <text x="30" y="35" text-anchor="middle" fill="var(--teal)" font-size="8.5">existing</text>
+          <text x="84" y="35" text-anchor="middle" fill="var(--blue)" font-size="8.5">new</text>
+          <text x="80" y="51" text-anchor="middle" fill="var(--dim)" font-size="10">↓ RANSAC refit</text>
+          <rect x="10" y="60" width="105" height="7" rx="2" fill="var(--teal)" opacity=".65"/>
+          <line x1="125" y1="70" x2="125" y2="56" stroke="var(--teal)" stroke-width="1.2"/>
+          <path d="M121,60 L125,54 L129,60" fill="none" stroke="var(--teal)" stroke-width="1.2"/>
+          <text x="131" y="62" fill="var(--teal)" font-size="9">n</text>
+          <text x="62" y="82" text-anchor="middle" fill="var(--dim)" font-size="8.5">merged plane</text>
+        </svg>
+      </div>
+      <p class="node-l" style="margin-top:8px">angle &lt;6° · dist &lt;0.3m · gap &lt;2.5m</p>
+    </div>
+
+    <div class="node" style="--k:var(--amber)">
+      <div class="node-t">④ Free Space Check</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 76" role="img" aria-label="Phantom plane over free cells rejected, real wall kept">
+          <rect x="0" y="0" width="160" height="76" rx="4" fill="var(--bg)" opacity=".5"/>
+          <g fill="var(--green)" fill-opacity=".15" stroke="var(--green)" stroke-width=".6">
+            <rect x="8" y="8" width="12" height="12" rx="1.5"/><rect x="22" y="8" width="12" height="12" rx="1.5"/><rect x="36" y="8" width="12" height="12" rx="1.5"/><rect x="50" y="8" width="12" height="12" rx="1.5"/>
+            <rect x="8" y="22" width="12" height="12" rx="1.5"/><rect x="22" y="22" width="12" height="12" rx="1.5"/><rect x="36" y="22" width="12" height="12" rx="1.5"/><rect x="50" y="22" width="12" height="12" rx="1.5"/>
+            <rect x="8" y="36" width="12" height="12" rx="1.5"/><rect x="22" y="36" width="12" height="12" rx="1.5"/><rect x="36" y="36" width="12" height="12" rx="1.5"/>
+          </g>
+          <rect x="5" y="5" width="60" height="50" rx="3" fill="var(--rose)" fill-opacity=".08" stroke="var(--rose)" stroke-dasharray="3,2"/>
+          <g fill="var(--dim)" fill-opacity=".1" stroke="var(--bd)" stroke-width=".5">
+            <rect x="96" y="8" width="12" height="12" rx="1.5"/><rect x="124" y="8" width="12" height="12" rx="1.5"/>
+            <rect x="96" y="22" width="12" height="12" rx="1.5"/><rect x="124" y="22" width="12" height="12" rx="1.5"/>
+            <rect x="96" y="36" width="12" height="12" rx="1.5"/><rect x="124" y="36" width="12" height="12" rx="1.5"/>
+          </g>
+          <rect x="110" y="8" width="12" height="40" rx="1.5" fill="var(--teal)" opacity=".45"/>
+          <text x="35" y="68" text-anchor="middle" fill="var(--rose)" font-size="8.5">&gt;33% free → ✗</text>
+          <text x="116" y="68" text-anchor="middle" fill="var(--green)" font-size="8.5">&lt;33% → ✓</text>
+        </svg>
+      </div>
+      <p class="node-l" style="margin-top:8px">rejects LiDAR reflection phantoms</p>
+    </div>
+
+    <div class="node" style="--k:var(--violet)">
+      <div class="node-t">⑤ Dilate → 2D Mask</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 84" role="img" aria-label="Wall line dilated into a 2D mask">
+          <rect x="0" y="0" width="160" height="84" rx="4" fill="var(--bg)" opacity=".5"/>
+          <rect x="56" y="14" width="48" height="64" rx="3" fill="var(--violet)" fill-opacity=".05" stroke="var(--violet)" stroke-width=".7" stroke-dasharray="2,2"/>
+          <rect x="68" y="10" width="24" height="72" rx="3" fill="var(--violet)" fill-opacity=".1" stroke="var(--violet)" stroke-width="1.2" stroke-dasharray="3,2"/>
+          <line x1="80" y1="16" x2="80" y2="76" stroke="var(--teal)" stroke-width="2.5"/>
+          <text x="96" y="10" fill="var(--violet)" font-size="8.5">+0.5m ↕</text>
+          <text x="52" y="48" text-anchor="end" fill="var(--violet)" font-size="8.5">+0.3m</text>
+          <text x="108" y="48" fill="var(--violet)" font-size="8.5">+0.3m</text>
+        </svg>
+      </div>
+      <p class="node-l mono" style="margin-top:8px">fillConvexPoly</p>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="box-t">Dual Wall Sources → Merge → Clean</div>
+    <div class="chips center">
+      <span class="chip" style="--k:var(--teal)">getWall() — Plane Fitting<small>Clean architectural walls · precise geometry</small></span>
+      <span class="chip" style="--k:var(--blue)">wall_hist — Height Histogram<small>Irregular barriers · bookshelves · furniture</small></span>
+      <span class="chip lg" style="--k:var(--violet)">OR</span>
+      <span class="chip" style="--k:var(--amber)">− Free Space Erasure<small>state_map clears phantom walls</small></span>
+      <span class="chip lg" style="--k:var(--rose)">→ Final Wall Mask</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  6. WATERSHED                                               -->
+<!-- ========================================================== -->
+<div class="sec" id="watershed">
+  <div class="sec-d" style="background:var(--rose);color:var(--bg);">6</div>
+  <h2 class="sec-t">Room Segmentation &amp; Door Detection</h2>
+</div>
+
+<div class="dg">
+  <div class="steps counted ws">
+    <div class="node" style="--k:var(--dim)">
+      <div class="node-t" style="color:var(--h)">Navigable − Walls</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 105" role="img" aria-label="Navigable area with walls removed">
+          <rect x="0" y="0" width="160" height="105" rx="5" fill="var(--bg)" opacity=".5"/>
+          <path d="M5,5 L155,5 L155,100 L5,100 Z" fill="var(--blue)" fill-opacity=".08"/>
+          <g fill="var(--h)" fill-opacity=".5"><rect x="72" y="5" width="8" height="52" rx="1"/><rect x="5" y="48" width="76" height="8" rx="1"/><rect x="105" y="30" width="8" height="70" rx="1"/></g>
+          <rect x="5" y="75" width="108" height="6" rx="1" fill="var(--h)" fill-opacity=".25"/>
+          <g fill="var(--blue)" font-size="12" opacity=".6" text-anchor="middle"><text x="36" y="32">open</text><text x="36" y="70">open</text><text x="133" y="66">open</text></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="node" style="--k:var(--dim)">
+      <div class="node-t" style="color:var(--h)">Dilate → Seeds</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 105" role="img" aria-label="Thickened walls leave three seed regions">
+          <rect x="0" y="0" width="160" height="105" rx="5" fill="var(--bg)" opacity=".5"/>
+          <g fill="var(--h)" fill-opacity=".25"><rect x="64" y="5" width="18" height="52" rx="2"/><rect x="5" y="42" width="80" height="18" rx="2"/><rect x="97" y="24" width="18" height="76" rx="2"/></g>
+          <rect x="5" y="68" width="108" height="14" rx="2" fill="var(--h)" fill-opacity=".12"/>
+          <circle cx="34" cy="23" r="13" fill="var(--rose)" fill-opacity=".25" stroke="var(--rose)" stroke-width="2.5"/>
+          <circle cx="34" cy="64" r="10" fill="var(--violet)" fill-opacity=".25" stroke="var(--violet)" stroke-width="2.5"/>
+          <circle cx="137" cy="62" r="12" fill="var(--green)" fill-opacity=".25" stroke="var(--green)" stroke-width="2.5"/>
+          <g font-size="12" font-weight="700" text-anchor="middle"><text x="34" y="27" fill="var(--rose)">1</text><text x="34" y="68" fill="var(--violet)">2</text><text x="137" y="66" fill="var(--green)">3</text></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="node" style="--k:var(--rose)">
+      <div class="node-t">Watershed</div>
+      <div class="fig">
+        <svg viewBox="0 0 160 105" role="img" aria-label="Three rooms after watershed">
+          <rect x="0" y="0" width="160" height="105" rx="5" fill="var(--bg)" opacity=".5"/>
+          <path d="M5,5 L72,5 L72,48 L5,48 Z" fill="var(--rose)" fill-opacity=".15"/>
+          <path d="M5,54 L72,54 L72,100 L5,100 Z" fill="var(--violet)" fill-opacity=".15"/>
+          <path d="M78,5 L155,5 L155,100 L78,100 Z" fill="var(--green)" fill-opacity=".15"/>
+          <g stroke="var(--h)" stroke-width="3"><line x1="75" y1="5" x2="75" y2="100"/><line x1="5" y1="51" x2="75" y2="51"/></g>
+          <g font-size="15" font-weight="700" text-anchor="middle"><text x="38" y="32" fill="var(--rose)">R1</text><text x="38" y="83" fill="var(--violet)">R2</text><text x="117" y="58" fill="var(--green)">R3</text></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="node" style="--k:var(--green)">
+      <div class="node-t">Door Detection → Room Graph</div>
+      <div class="door-figs">
+        <div class="split" style="justify-content:center">
+          <svg width="76" viewBox="0 0 54 54" role="img" aria-label="3 by 3 pixel neighbourhood with a boundary pixel">
+            <g stroke="var(--bd)" stroke-width=".5">
+              <rect x="0" y="0" width="16" height="16" fill="var(--rose)" fill-opacity=".18"/><rect x="18" y="0" width="16" height="16" fill="var(--rose)" fill-opacity=".18"/><rect x="36" y="0" width="16" height="16" fill="var(--green)" fill-opacity=".18"/>
+              <rect x="0" y="18" width="16" height="16" fill="var(--rose)" fill-opacity=".18"/><rect x="36" y="18" width="16" height="16" fill="var(--green)" fill-opacity=".18"/>
+              <rect x="0" y="36" width="16" height="16" fill="var(--violet)" fill-opacity=".18"/><rect x="18" y="36" width="16" height="16" fill="var(--violet)" fill-opacity=".18"/><rect x="36" y="36" width="16" height="16" fill="var(--green)" fill-opacity=".18"/>
+            </g>
+            <rect x="18" y="18" width="16" height="16" fill="var(--h)" fill-opacity=".35" stroke="var(--amber)" stroke-width="2"/>
+            <text x="26" y="30" text-anchor="middle" fill="var(--amber)" font-size="9" font-weight="700">-1</text>
+          </svg>
+          <ul>
+            <li>boundary pixel check</li>
+            <li>exactly 2 neighbors → door</li>
+          </ul>
+        </div>
+        <div class="fig">
+          <svg viewBox="0 0 190 100" role="img" aria-label="Room graph with door edges">
+            <rect x="0" y="0" width="190" height="100" rx="5" fill="var(--bg)" opacity=".5"/>
+            <g stroke="var(--dim)" stroke-width="2.5"><line x1="65" y1="34" x2="120" y2="50"/><line x1="65" y1="72" x2="120" y2="58"/><line x1="48" y1="44" x2="48" y2="60"/></g>
+            <g fill="color-mix(in srgb, var(--rose) 15%, var(--bg))" stroke="var(--rose)" stroke-width="2.5"><circle cx="48" cy="26" r="18"/></g>
+            <g fill="color-mix(in srgb, var(--violet) 15%, var(--bg))" stroke="var(--violet)" stroke-width="2.5"><circle cx="48" cy="78" r="18"/></g>
+            <g fill="color-mix(in srgb, var(--green) 15%, var(--bg))" stroke="var(--green)" stroke-width="2.5"><circle cx="138" cy="54" r="18"/></g>
+            <g font-size="12" font-weight="700" text-anchor="middle"><text x="48" y="30" fill="var(--rose)">R1</text><text x="48" y="82" fill="var(--violet)">R2</text><text x="138" y="58" fill="var(--green)">R3</text></g>
+            <g fill="var(--s)" stroke="var(--bd)"><rect x="75" y="29" width="38" height="17" rx="3"/><rect x="75" y="58" width="38" height="17" rx="3"/><rect x="58" y="44" width="38" height="17" rx="3"/></g>
+            <g fill="var(--dim)" font-size="10.5" text-anchor="middle"><text x="94" y="41.5">door</text><text x="94" y="70.5">door</text><text x="77" y="56.5">door</text></g>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box pub">
+    <b>Published:</b>
+    <span style="--k:var(--blue)"><i></i>room_mask (Int32)</span>
+    <span style="--k:var(--teal)"><i></i>RoomNodeList (id, polygon, centroid, neighbors)</span>
+    <span style="--k:var(--amber)"><i></i>door_cloud (PointXYZRGBL)</span>
+    <span style="--k:var(--green)"><i></i>room_boundary (PolygonStamped)</span>
+    <span style="--k:var(--rose)"><i></i>room_mask_vis</span>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  7. NAVIGATION STRATEGY                                     -->
+<!-- ========================================================== -->
+<div class="sec" id="nav">
+  <div class="sec-d" style="background:var(--green);color:var(--bg);">7</div>
+  <h2 class="sec-t">Navigation State Machine</h2>
+</div>
+
+<div class="dg">
+  <div class="fig fig-scroll" style="--minw:860px">
+    <svg viewBox="0 0 900 250" role="img" aria-label="Navigation state machine">
+      <defs>
+        <marker id="m-c" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="9" markerHeight="7" orient="auto"><path d="M0 0L10 4L0 8z" fill="var(--c)"/></marker>
+        <marker id="m-g" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="9" markerHeight="7" orient="auto"><path d="M0 0L10 4L0 8z" fill="var(--green)"/></marker>
+        <marker id="m-a" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="9" markerHeight="7" orient="auto"><path d="M0 0L10 4L0 8z" fill="var(--amber)"/></marker>
+      </defs>
+
+      <!-- loop: enter new room (Select → Explore) -->
+      <path d="M455,63 Q455,22 265,22 Q75,22 75,61" fill="none" stroke="var(--c)" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#m-c)"/>
+      <text class="sans" x="265" y="15" text-anchor="middle" fill="var(--dim)" font-size="13">enter new room</text>
+
+      <!-- Explore → Switch: early stop / room done -->
+      <line x1="132" y1="103" x2="205" y2="98" stroke="var(--green)" stroke-width="2.2" marker-end="url(#m-g)"/>
+      <text class="sans" x="170" y="56" text-anchor="middle" fill="var(--green)" font-size="13" font-weight="600">VLM: early stop!</text>
+      <line x1="132" y1="147" x2="205" y2="152" stroke="var(--amber)" stroke-width="2.2" marker-end="url(#m-a)"/>
+      <text class="sans" x="170" y="200" text-anchor="middle" fill="var(--amber)" font-size="13" font-weight="600">room done</text>
+
+      <!-- Switch → Select -->
+      <line x1="327" y1="125" x2="390" y2="125" stroke="var(--c)" stroke-width="2.2" marker-end="url(#m-c)"/>
+      <!-- Select → Verify -->
+      <line x1="517" y1="125" x2="580" y2="125" stroke="var(--c)" stroke-width="2.2" marker-end="url(#m-c)"/>
+      <text class="sans" x="548" y="112" text-anchor="middle" fill="var(--dim)" font-size="13">navigate</text>
+      <!-- Verify → Done -->
+      <line x1="707" y1="125" x2="742" y2="125" stroke="var(--green)" stroke-width="2.6" marker-end="url(#m-g)"/>
+
+      <!-- target candidate trigger (Explore ↔ Verify) -->
+      <path d="M75,189 Q75,232 360,232 Q645,232 645,189" fill="none" stroke="var(--rose)" stroke-width="1.6" stroke-dasharray="5,4"/>
+      <text x="360" y="247" text-anchor="middle" fill="var(--rose)" font-size="13" font-weight="600" class="sans">target candidate detected at any time</text>
+
+      <!-- States -->
+      <g stroke-width="2.5">
+        <circle cx="75" cy="125" r="62" fill="color-mix(in srgb, var(--teal) 9%, var(--bg))" stroke="var(--teal)"/>
+        <circle cx="265" cy="125" r="62" fill="color-mix(in srgb, var(--green) 9%, var(--bg))" stroke="var(--green)"/>
+        <circle cx="455" cy="125" r="62" fill="color-mix(in srgb, var(--amber) 9%, var(--bg))" stroke="var(--amber)"/>
+        <circle cx="645" cy="125" r="62" fill="color-mix(in srgb, var(--rose) 9%, var(--bg))" stroke="var(--rose)"/>
+      </g>
+      <g font-size="13.5" font-weight="700" text-anchor="middle">
+        <text x="75" y="112" fill="var(--teal)">Explore</text><text x="75" y="129" fill="var(--teal)">Room</text>
+        <text x="265" y="112" fill="var(--green)">Switch</text><text x="265" y="129" fill="var(--green)">Room</text>
+        <text x="455" y="112" fill="var(--amber)">VLM</text><text x="455" y="129" fill="var(--amber)">Select Room</text>
+        <text x="645" y="112" fill="var(--rose)">VLM</text><text x="645" y="129" fill="var(--rose)">Verify Object</text>
+      </g>
+      <g class="sans" font-size="13" fill="var(--dim)" text-anchor="middle">
+        <text x="75" y="150">coverage path</text><text x="75" y="166">TSP planning</text>
+        <text x="265" y="150">travel to</text><text x="265" y="166">new room</text>
+        <text x="455" y="150">chain-of-thought</text><text x="455" y="166">reasoning</text>
+        <text x="645" y="150">attribute + room</text><text x="645" y="166">+ spatial match</text>
+      </g>
+
+      <!-- Done -->
+      <rect x="746" y="92" width="150" height="66" rx="12" fill="color-mix(in srgb, var(--green) 12%, var(--bg))" stroke="var(--green)" stroke-width="2.5"/>
+      <text x="821" y="122" text-anchor="middle" fill="var(--green)" font-size="16" font-weight="700">DONE ✓</text>
+      <text class="sans" x="821" y="143" text-anchor="middle" fill="var(--dim)" font-size="13">navigate to object</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!--  8. CODE MAP                                                -->
+<!-- ========================================================== -->
+<div class="sec" id="code">
+  <div class="sec-d" style="background:var(--cyan);color:var(--bg);">8</div>
+  <h2 class="sec-t">Codebase → Paper Mapping (ROS2 Workspace)</h2>
+</div>
+
+<div class="dg">
+  <div class="cells" style="grid-template-columns:repeat(auto-fit,minmax(270px,1fr))">
+    <div class="lvl" style="--k:var(--blue)">
+      <span class="lvl-tag">HIGH LEVEL · Python</span>
+      <div class="files">
+        <div class="file" style="--k:var(--teal)"><b>detection_node.py</b><span>YOLOE-26x TensorRT · BoTSORT tracker · publish DetectionResult</span></div>
+        <div class="file" style="--k:var(--violet)"><b>semantic_mapping_node.py</b><span>SAM2 segmentation · time sync (SLERP) · 0.5s main loop</span></div>
+        <div class="file" style="--k:var(--blue)"><b>cloud_image_fusion.py</b><span>LiDAR→panorama projection · depth discontinuity · per-platform calibration</span></div>
+        <div class="file" style="--k:var(--rose)"><b>semantic_map_new.py</b><span>ObjMapper: merge by trackID + 3D IoU · prune inactive · scene graph</span></div>
+        <div class="file" style="--k:var(--green)"><b>single_object_new.py</b><span>VoxelFeatureManager · DBSCAN · oriented bbox · multi-label voting</span></div>
+        <div class="file" style="--k:var(--amber)"><b>vlm_reasoning_node.py</b><span>Gemini API · 6 query types · Pydantic structured output · 10Hz timer</span></div>
+        <div class="file note" style="--k:var(--cyan)"><b>Platform calibration: mecanum · mecanum_sim · diablo · wheelchair · scannet</b></div>
+      </div>
+    </div>
+    <div class="lvl" style="--k:var(--teal)">
+      <span class="lvl-tag">MID LEVEL · C++</span>
+      <div class="files">
+        <div class="file" style="--k:var(--rose)"><b>room_segmentation.cpp</b><span>Wall detection · region growing · watershed · door detect · room graph</span></div>
+        <div class="file" style="--k:var(--teal)"><b>sensor_coverage_planner_ground.cpp</b><span>Main exploration planner · state machine · room-level decisions</span></div>
+        <div class="file" style="--k:var(--blue)"><b>viewpoint_manager.cpp</b><span>Coverage sampling · viewpoint tracking · boundary management</span></div>
+        <div class="file" style="--k:var(--violet)"><b>local_coverage_planner.cpp</b><span>TSP path generation · local + global planning · rolling window</span></div>
+        <div class="file" style="--k:var(--green)"><b>planning_env.cpp · grid_world.cpp · graph.cpp</b><span>Occupancy grid · collision checking · graph data structures</span></div>
+        <div class="file" style="--k:var(--amber)"><b>graph_extractor.cpp · decoder_node.cpp</b><span>Route planner: inter-room path generation</span></div>
+        <div class="file note" style="--k:var(--cyan)"><b>representation.cpp: RoomNodeRep · ViewpointRep data structures</b></div>
+      </div>
+    </div>
+    <div class="lvl" style="--k:var(--amber)">
+      <span class="lvl-tag">LOW LEVEL · C++</span>
+      <div class="files">
+        <div class="file" style="--k:var(--green)"><b>localPlanner.cpp</b><span>Local path planning · obstacle avoidance · trajectory generation</span></div>
+        <div class="file" style="--k:var(--teal)"><b>pathFollower.cpp</b><span>Waypoint following · velocity commands · look-ahead control</span></div>
+        <div class="file" style="--k:var(--blue)"><b>terrainAnalysis.cpp / terrainAnalysisExt.cpp</b><span>Terrain traversability · slope/roughness analysis · elevation mapping</span></div>
+        <div class="file" style="--k:var(--violet)"><b>sensorScanGeneration.cpp</b><span>LiDAR scan preprocessing · registered scan output</span></div>
+        <div class="file" style="--k:var(--rose)"><b>vehicleSimulator.cpp</b><span>Simulated robot dynamics for testing</span></div>
+        <div class="file" style="--k:var(--amber)"><b>arise_slam_mid360 (SLAM)</b><span>Feature extraction · IMU preintegration · LiDAR-inertial mapping</span></div>
+        <div class="file note" style="--k:var(--cyan)"><b>3 embodiments: Mecanum wheel · Unitree Go2 quadruped · Unitree G1 humanoid</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

@@ -69,7 +69,7 @@ python3 build.py                       # build only, into _site/
 python3 build.py --staging --serve     # what the staging preview looks like
 ```
 
-No dependencies beyond Python 3.
+Needs Python 3 with `pyyaml` and `markdown` (`pip install pyyaml markdown`).
 
 ## Branches and deployment
 
@@ -116,6 +116,8 @@ collide with the staging output. Anything else is fine.
 
 ## Styling
 
-Shared styling for the generated index pages lives in `assets/style.css`
-(light and dark, follows the system theme). Your content pages are never
-touched by it, they keep whatever styles they ship with.
+All explainer pages share one design system, `assets/explainer.css`. Pages
+only carry CSS for their own visualizations. The sidebar and header are
+isolated, so nothing a page does can change them. See `STYLE.md` for the
+rules and `templates/paper-explainer.html` for a starting point, and run
+`python3 build.py --check` before pushing.

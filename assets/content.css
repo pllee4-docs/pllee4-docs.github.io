@@ -1,0 +1,346 @@
+/*
+ * Shared design language for content pages (markdown and HTML).
+ *
+ * All selectors are scoped under .paper — no :root variables, no bare
+ * element selectors, so this file is safe to load on any page without
+ * overriding the page's own theme or breaking the site shell.
+ *
+ * Markdown pages only. Tokens, body and page width come from
+ * assets/explainer.css (injected by build.py), so .paper adds no
+ * padding or width of its own.
+ */
+
+/* ── Scoped reset + base ──────────────────────────────────── */
+
+.paper { box-sizing: border-box; }
+.paper *, .paper *::before, .paper *::after { box-sizing: inherit; }
+
+.paper {
+  color: var(--fg);
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+/* ── Typography ───────────────────────────────────────────── */
+
+.paper h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
+  font-weight: 700;
+  color: var(--h);
+  letter-spacing: -.03em;
+  margin: 0 0 .5rem;
+}
+.paper h2 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--h);
+  margin: 2rem 0 .6rem;
+  padding-bottom: .3rem;
+  border-bottom: 1px solid var(--bd);
+}
+.paper h3 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--h);
+  margin: 1.5rem 0 .4rem;
+}
+.paper h4 {
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--h);
+  margin: 1.2rem 0 .3rem;
+}
+
+.paper p { margin: 0 0 1rem; }
+
+/* ── Links ────────────────────────────────────────────────── */
+
+.paper a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.paper a:hover { text-decoration-thickness: 2px; }
+
+/* ── Lists ────────────────────────────────────────────────── */
+
+.paper ul, .paper ol {
+  margin: 0 0 1rem;
+  padding-left: 1.5em;
+}
+.paper li { margin-bottom: .3rem; }
+.paper li > ul, .paper li > ol { margin-top: .3rem; margin-bottom: 0; }
+
+/* ── Blockquote ───────────────────────────────────────────── */
+
+.paper blockquote {
+  border-left: 3px solid var(--blue);
+  margin: 1rem 0;
+  padding: .5rem 1rem;
+  color: var(--dim);
+  background: var(--s);
+  border-radius: 0 6px 6px 0;
+}
+.paper blockquote p:last-child { margin-bottom: 0; }
+
+/* ── Horizontal rule ──────────────────────────────────────── */
+
+.paper hr {
+  border: none;
+  border-top: 1px solid var(--bd);
+  margin: 2rem 0;
+}
+
+/* ── Images ───────────────────────────────────────────────── */
+
+.paper img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: .5rem 0;
+}
+
+/* ── Strong / em ──────────────────────────────────────────── */
+
+.paper strong { color: var(--h); font-weight: 600; }
+
+/* ── Subtitle / citation ──────────────────────────────────── */
+
+.paper .sub {
+  color: var(--dim);
+  font-size: .84rem;
+  line-height: 1.65;
+  margin-bottom: 2rem;
+  max-width: 620px;
+}
+.paper .sub a { color: var(--blue); text-underline-offset: 2px; }
+
+/* ── TLDR box ─────────────────────────────────────────────── */
+
+.paper .tldr {
+  border-left: 3px solid var(--teal);
+  padding: .75rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--s);
+  border-radius: 0 6px 6px 0;
+  font-size: .85rem;
+  line-height: 1.65;
+}
+.paper .tldr strong { color: var(--h); }
+.paper .tldr a { color: var(--blue); text-underline-offset: 2px; }
+
+/* ── Section navigation pills ─────────────────────────────── */
+
+.paper-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-bottom: 1.5rem;
+}
+.paper-nav a {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .75rem;
+  padding: .35rem .7rem;
+  background: var(--s);
+  border: 1px solid var(--bd);
+  border-radius: 5px;
+  color: var(--fg);
+  text-decoration: none;
+  transition: border-color .2s, color .2s;
+}
+.paper-nav a:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+/* ── Numbered section header ──────────────────────────────── */
+
+.paper .sec {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: 2.5rem 0 .8rem;
+}
+.paper .sec-d {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem; font-weight: 700;
+  flex-shrink: 0;
+}
+.paper .sec-t {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem; font-weight: 600;
+  color: var(--h);
+}
+.paper .sec-l { flex: 1; height: 1px; background: var(--bd); }
+
+/* ── Card + stepper ───────────────────────────────────────── */
+
+.paper .card {
+  background: var(--s);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.paper .card-body { padding: 18px; }
+.paper .card-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .78rem; font-weight: 600;
+  padding: 12px 18px 0;
+  color: var(--h);
+}
+
+.paper .bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--bd);
+  background: var(--c);
+}
+.paper .bar button {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .73rem;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  background: var(--blue);
+  color: var(--bg);
+  transition: opacity .15s;
+}
+.paper .bar button:hover:not(:disabled) { opacity: .85; }
+.paper .bar button:disabled {
+  background: var(--bd);
+  color: var(--dim);
+  cursor: default;
+  opacity: .55;
+}
+.paper .slab {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem; color: var(--dim);
+  margin-left: auto;
+}
+
+/* ── Visualization area ───────────────────────────────────── */
+
+.paper .vis { width: 100%; overflow-x: auto; margin: .5rem 0; }
+.paper .vis svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.paper .graph-wrap { padding: 14px 8px; overflow-x: auto; }
+.paper .graph-wrap svg { display: block; margin: 0 auto; }
+
+/* ── Description block under stepper ──────────────────────── */
+
+.paper .desc-card {
+  background: var(--s);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: .84rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+/* ── Code / inline code ───────────────────────────────────── */
+
+.paper code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .82em;
+  background: var(--c);
+  padding: .15em .4em;
+  border-radius: 4px;
+}
+.paper pre {
+  background: var(--s);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: .8rem;
+  line-height: 1.5;
+  margin: .5rem 0 1rem;
+}
+.paper pre code { background: none; padding: 0; font-size: inherit; }
+
+/* ── Note/callout ─────────────────────────────────────────── */
+
+.paper .note {
+  border-left: 3px solid var(--blue);
+  padding: .6rem 1rem;
+  margin: 1rem 0;
+  background: var(--s);
+  border-radius: 0 6px 6px 0;
+  font-size: .84rem;
+}
+.paper .note strong { color: var(--h); }
+
+/* ── Details/summary for collapsible demos ────────────────── */
+
+.paper details {
+  margin: .5rem 0 1rem;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.paper summary {
+  padding: 10px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .82rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--s);
+  color: var(--h);
+  list-style: none;
+}
+.paper summary::before { content: '▸ '; }
+.paper details[open] summary::before { content: '▾ '; }
+.paper details[open] summary { border-bottom: 1px solid var(--bd); }
+
+/* ── Tables ───────────────────────────────────────────────── */
+
+.paper table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .84rem;
+  margin: .5rem 0 1rem;
+}
+.paper th, .paper td {
+  padding: 8px 12px;
+  border: 1px solid var(--bd);
+  text-align: left;
+}
+.paper th {
+  background: var(--s);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--h);
+}
+
+/* ── Utility: flex row for side-by-side items ─────────────── */
+
+.paper .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.paper .row > * { flex: 1; min-width: 260px; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .paper h1 { font-size: 1.3rem; }
+  .paper .card-body { padding: 12px; }
+  .paper .bar { padding: 6px 10px; gap: 6px; }
+  .paper .bar button { padding: 4px 10px; font-size: .7rem; }
+}
